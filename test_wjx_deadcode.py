@@ -44,7 +44,7 @@ def main() -> int:
     print(f"[INFO] 发现死代码数: {len(lines)}")
 
     if not lines:
-        print("[PASS] 未发现死代码（置信度 >= {MIN_CONFIDENCE}%）。")
+        print(f"[PASS] 未发现死代码（置信度 >= {MIN_CONFIDENCE}%）。")
         return 0
 
     print(f"[FAIL] 发现 {len(lines)} 处疑似死代码（置信度 >= {MIN_CONFIDENCE}%）：")

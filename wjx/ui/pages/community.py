@@ -142,7 +142,7 @@ class CommunityPage(ScrollArea):
             "padding: 12px;"
         )
         self.qq_qr_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.qq_qr_label.mousePressEvent = lambda ev: self._on_qr_clicked()
+        self.qq_qr_label.mousePressEvent = lambda _: self._on_qr_clicked()
         self._load_qr_image()
 
         self.qq_inner.addWidget(self.qq_qr_label, 0, Qt.AlignmentFlag.AlignVCenter)

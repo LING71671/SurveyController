@@ -631,31 +631,6 @@ def list_browser_pids() -> Set[int]:
     return pids
 
 
-def graceful_terminate_process_tree(pids: Set[int], wait_seconds: float = 3.0) -> int:
-    """
-    使用 taskkill 强制终止指定 PID 及其子进程树。
-    返回被处理的进程数量。
-    """
-    unique_pids = [int(p) for p in sorted(set(pids or [])) if int(p) > 0]
-    if not unique_pids:
-        return 0
-
-    _no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-    count = 0
-    for pid in unique_pids:
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(pid)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=max(1.0, float(wait_seconds or 3.0)),
-                creationflags=_no_window,
-            )
-            count += 1
-        except Exception as exc:
-            log_suppressed_exception("browser_driver.graceful_terminate_process_tree taskkill", exc, level=logging.WARNING)
-    return count
-
 
 def create_browser_manager(
     *,

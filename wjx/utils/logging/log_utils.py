@@ -238,11 +238,11 @@ class LogBufferHandler(logging.Handler):
         except Exception:
             self.handleError(record)
 
-    def get_records(self, try_lock: bool = False) -> List[LogBufferEntry]:
+    def get_records(self, _try_lock: bool = False) -> List[LogBufferEntry]:
         """获取日志记录
 
         Args:
-            try_lock: 兼容参数，保持接口一致（异步模式下无需锁）
+            _try_lock: 兼容参数，保持接口一致（异步模式下无需锁）
 
         Returns:
             日志记录列表

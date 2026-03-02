@@ -11,7 +11,6 @@ from wjx.network.browser.driver import (
     TimeoutException,
     create_browser_manager,
     create_playwright_driver,
-    graceful_terminate_process_tree,
     list_browser_pids,
     shutdown_browser_manager,
 )
@@ -27,7 +26,6 @@ __all__ = [
     "TimeoutException",
     "create_browser_manager",
     "create_playwright_driver",
-    "graceful_terminate_process_tree",
     "list_browser_pids",
     "shutdown_browser_manager",
 ]
