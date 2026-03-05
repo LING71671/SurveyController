@@ -39,7 +39,7 @@ from wjx.core.questions.types.text import (
 )
 from wjx.core.questions.consistency import reset_consistency_context
 from wjx.core.questions.tendency import reset_tendency
-from wjx.core.survey.parser import _should_mark_as_multi_text, _should_treat_question_as_text_like
+from wjx.core.survey.parser import _should_treat_question_as_text_like
 from wjx.network.browser import BrowserDriver, By, NoSuchElementException
 
 
@@ -304,10 +304,6 @@ def brush(
                         except Exception:
                             option_count = 0
                     text_input_count = _count_visible_text_inputs_driver(question_div) if question_div is not None else 0
-                    is_location_q = _driver_question_is_location(question_div) if question_div is not None else False
-                    is_multi_text_question = _should_mark_as_multi_text(
-                        question_type, option_count, text_input_count, is_location_q
-                    )
                     is_text_like_question = _should_treat_question_as_text_like(
                         question_type, option_count, text_input_count
                     )
@@ -326,10 +322,6 @@ def brush(
                             ctx.multi_text_blank_ai_flags,
                         )
                         _indices["text"] += 1
-                        print(
-                            f"第{current_question_number}题识别为"
-                            f"{'多项填空' if is_multi_text_question else '填空'}，已按填空题处理"
-                        )
                     else:
                         print(f"第{current_question_number}题为不支持类型(type={question_type})")
 

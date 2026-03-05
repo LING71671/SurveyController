@@ -9,10 +9,12 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import Qt, QTimer, QSettings, Signal, QEvent
-from PySide6.QtGui import QIcon, QGuiApplication
+from PySide6.QtGui import QIcon, QGuiApplication, QColor
 from PySide6.QtWidgets import QDialog, QFileDialog
 from qfluentwidgets import (
+    DotInfoBadge,
     FluentWindow,
+    InfoBadgePosition,
     InfoBar,
     InfoBarPosition,
     MessageBox,
@@ -88,6 +90,9 @@ class MainWindow(
         setThemeColor("#2563EB")
         qconfig.themeChanged.connect(self._on_theme_changed)
         self._skip_save_on_close = False
+        self._community_hint_setting_key = "community_card_request_badge_pending"
+        self._community_hint_pending = False
+        self._community_hint_badge = None
         
         self.setWindowTitle(f"问卷星速填 v{__VERSION__}")
         icon_path = get_resource_path(APP_ICON_RELATIVE_PATH)
@@ -142,6 +147,8 @@ class MainWindow(
 
         self._init_navigation()
         self._init_changelog_navigation()
+        self._init_community_hint_badge_state()
+        self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
         # 设置侧边栏宽度和折叠策略（延迟到事件循环中，避免时序问题）
         self.navigationInterface.setExpandWidth(140)
         QTimer.singleShot(0, self._setup_sidebar_state)
@@ -382,8 +389,61 @@ class MainWindow(
         
         super().closeEvent(e)
 
+    def _init_community_hint_badge_state(self):
+        settings = QSettings("FuckWjx", "Settings")
+        self._community_hint_pending = get_bool_from_qsettings(
+            settings.value(self._community_hint_setting_key),
+            False,
+        )
+        self._refresh_community_hint_badge()
+
+    def _set_community_hint_pending(self, pending: bool):
+        self._community_hint_pending = bool(pending)
+        settings = QSettings("FuckWjx", "Settings")
+        settings.setValue(self._community_hint_setting_key, self._community_hint_pending)
+        self._refresh_community_hint_badge()
+
+    def _refresh_community_hint_badge(self):
+        nav_item = self.navigationInterface.widget("community")
+        if nav_item is None:
+            return
+
+        if not self._community_hint_pending:
+            self._clear_community_hint_badge()
+            return
+
+        if self._community_hint_badge is None:
+            badge_parent = nav_item.parentWidget() or self.navigationInterface
+            self._community_hint_badge = DotInfoBadge.custom(
+                QColor("#2563EB"),
+                QColor("#60A5FA"),
+                parent=badge_parent,
+                target=nav_item,
+                position=InfoBadgePosition.NAVIGATION_ITEM,
+            )
+            self._community_hint_badge.setFixedSize(8, 8)
+
+        self._community_hint_badge.show()
+
+    def _clear_community_hint_badge(self):
+        badge = self._community_hint_badge
+        if badge is None:
+            return
+        badge.hide()
+        badge.deleteLater()
+        self._community_hint_badge = None
+
+    def _on_card_request_contact_sent(self):
+        self._set_community_hint_pending(True)
+
+    def _on_stack_widget_changed(self, _index: int):
+        current_widget = self.stackedWidget.currentWidget()
+        if current_widget and current_widget.objectName() == "community":
+            self._set_community_hint_pending(False)
+
     def _open_contact_dialog(self, default_type: str = "报错反馈"):
         dlg = ContactDialog(self, default_type=default_type, status_fetcher=get_status, status_formatter=_format_status_payload)
+        dlg.form.cardRequestSucceeded.connect(self._on_card_request_contact_sent)
         dlg.exec()
 
     def _center_on_screen(self):

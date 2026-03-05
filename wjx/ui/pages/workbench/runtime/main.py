@@ -147,12 +147,30 @@ class RuntimePage(ScrollArea):
         self.custom_api_edit = self.random_ip_card.customApiEdit
 
     def _bind_events(self):
+        self.target_spin.valueChanged.connect(self._sync_target_to_dashboard)
+        self.thread_spin.valueChanged.connect(self._sync_threads_to_dashboard)
         self.random_ip_switch.checkedChanged.connect(self._on_random_ip_toggled)
         self.random_ua_switch.checkedChanged.connect(self._on_random_ua_toggled)
         self.timed_switch.checkedChanged.connect(self._sync_timed_mode)
         self.timed_card.helpButton.clicked.connect(self._show_timed_mode_help)
         self.proxy_source_combo.currentIndexChanged.connect(self._on_proxy_source_changed)
         self.reliability_mode_switch.checkedChanged.connect(self._on_reliability_mode_toggled)
+
+    def _sync_target_to_dashboard(self, value: int):
+        main_win = self.window()
+        dashboard = getattr(main_win, "dashboard", None)
+        if dashboard is not None and hasattr(dashboard, "target_spin"):
+            dashboard.target_spin.blockSignals(True)
+            dashboard.target_spin.setValue(int(value))
+            dashboard.target_spin.blockSignals(False)
+
+    def _sync_threads_to_dashboard(self, value: int):
+        main_win = self.window()
+        dashboard = getattr(main_win, "dashboard", None)
+        if dashboard is not None and hasattr(dashboard, "thread_spin"):
+            dashboard.thread_spin.blockSignals(True)
+            dashboard.thread_spin.setValue(int(value))
+            dashboard.thread_spin.blockSignals(False)
 
     def _show_timed_mode_help(self):
         """显示定时模式说明"""

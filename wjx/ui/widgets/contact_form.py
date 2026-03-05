@@ -103,6 +103,7 @@ class ContactForm(StatusPollingMixin, QWidget):
     _verifyCodeFinished = Signal(bool, str, str)  # success, message, email
 
     sendSucceeded = Signal()
+    cardRequestSucceeded = Signal()
     cancelRequested = Signal()
 
     def __init__(
@@ -887,6 +888,8 @@ class ContactForm(StatusPollingMixin, QWidget):
             if getattr(self, "_current_has_email", False):
                 msg += " 开发者将于6小时内回复"
             InfoBar.success("", msg, parent=self, position=InfoBarPosition.TOP, duration=2500)
+            if current_type == "卡密获取":
+                self.cardRequestSucceeded.emit()
             if self._auto_clear_on_success:
                 self.amount_edit.clear()
                 self.quantity_edit.clear()
