@@ -1,6 +1,5 @@
 """主控制面板：卡片式配置区 + 底部状态条（不包含日志）"""
 import os
-import copy
 import threading
 from typing import Optional
 import logging
@@ -463,7 +462,7 @@ class DashboardPage(
 
     @staticmethod
     def _is_survey_domain(url: str) -> bool:
-        """检查是否为问卷域名（v.wjx.cn 及其子域），排除投票和考试链接。"""
+        """检查是否为问卷域名（仅允许 v.wjx.cn、www.wjx.cn 及其子域）。"""
         if not url:
             return False
         text = str(url).strip()
@@ -476,8 +475,8 @@ class DashboardPage(
         except Exception:
             return False
         host = (parsed.netloc or "").split(":", 1)[0].lower()
-        # 只接受 v.wjx.cn 及其子域名（问卷链接）
-        return bool(host == "v.wjx.cn" or host.endswith(".v.wjx.cn"))
+        # 白名单：只接受 v.wjx.cn、www.wjx.cn 及其子域名
+        return host in ("v.wjx.cn", "www.wjx.cn") or host.endswith(".v.wjx.cn")
 
     def _on_show_config_list(self):
         try:
@@ -521,8 +520,9 @@ class DashboardPage(
 
     def _on_save_config(self):
         cfg = self._build_config()
-        # 运行时使用深拷贝，避免执行过程污染用户配置
-        cfg.question_entries = [copy.deepcopy(entry) for entry in self.question_page.get_entries()]
+        # 序列化过滤 UI 组件
+        from wjx.utils.io.load_save import serialize_question_entry, deserialize_question_entry
+        cfg.question_entries = [deserialize_question_entry(serialize_question_entry(entry)) for entry in self.question_page.get_entries()]
         cfg.questions_info = list(self.question_page.questions_info or [])
         self.controller.config = cfg
         configs_dir = os.path.join(get_runtime_directory(), "configs")

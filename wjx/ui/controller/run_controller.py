@@ -408,7 +408,7 @@ class RunController(QObject):
                     custom_weights = list(weights)
                     texts = None
                 elif q_type == "multiple":
-                    probabilities = [1.0] * option_count
+                    probabilities = [50.0] * option_count
                     distribution = "random"
                     custom_weights = None
                     texts = None
