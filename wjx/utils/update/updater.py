@@ -69,6 +69,10 @@ def _apply_mirror_to_url(url: str, mirror_key: Optional[str] = None) -> str:
     if mirror_key is None:
         mirror_key = _get_github_mirror()
     mirror_config = GITHUB_MIRROR_SOURCES.get(mirror_key, {})
+    direct_download_url = str(mirror_config.get("direct_download_url", "")).strip()
+    if direct_download_url:
+        logging.debug(f"使用镜像源 [{mirror_key}] 直连地址: {direct_download_url}")
+        return direct_download_url
     prefix = mirror_config.get("download_prefix", "")
     if prefix and url.startswith("https://github.com/"):
         mirrored_url = prefix + url

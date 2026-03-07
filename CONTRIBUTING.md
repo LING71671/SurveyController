@@ -18,6 +18,10 @@
 
 ```markdown
 仓库根目录
+├── .github/
+│   ├── workflows/
+│   │   └── release-to-r2.yml  # CI/CD 自动发布到 R2
+│   └── ISSUE_TEMPLATE/        # Issue 模板（报错反馈、新功能请求）
 ├── fuck-wjx.py
 ├── rthook_pyside6.py     # PySide6 打包钩子
 ├── test_wjx_imports.py   # 导入检测脚本

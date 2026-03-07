@@ -99,11 +99,11 @@ class SettingsPage(ScrollArea):
         self.auto_update_card.setChecked(get_bool_from_qsettings(settings.value("auto_check_update"), True))
         self.update_group.addSettingCard(self.auto_update_card)
 
-        # 下载镜像源选择
+        # 下载源选择
         self.mirror_card = SettingCard(
             FluentIcon.DOWNLOAD,
-            "下载镜像源",
-            "国内用户建议使用镜像加速下载",
+            "下载源",
+            "选择用于下载更新的源（如果下载速度较慢，可以尝试切换到其他源）",
             self.update_group
         )
         self.mirror_combo = ComboBox(self.mirror_card)
@@ -363,7 +363,7 @@ class SettingsPage(ScrollArea):
         )
 
     def _on_mirror_changed(self):
-        """镜像源选择变化"""
+        """下载源选择变化"""
         idx = self.mirror_combo.currentIndex()
         mirror_key = str(self.mirror_combo.itemData(idx)) if idx >= 0 else DEFAULT_GITHUB_MIRROR
         settings = QSettings("FuckWjx", "Settings")
@@ -371,7 +371,7 @@ class SettingsPage(ScrollArea):
         mirror_label = GITHUB_MIRROR_SOURCES.get(mirror_key, {}).get("label", mirror_key)
         InfoBar.success(
             "",
-            f"下载镜像源已切换为：{mirror_label}",
+            f"下载源已切换为：{mirror_label}",
             parent=self.window(),
             position=InfoBarPosition.TOP,
             duration=2000

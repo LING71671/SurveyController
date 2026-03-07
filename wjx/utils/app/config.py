@@ -425,6 +425,12 @@ _ENGLISH_MULTI_MIN_PATTERNS = (
 
 # ==================== GitHub 镜像源配置 ====================
 GITHUB_MIRROR_SOURCES = {
+    "official": {
+        "label": "官方服务器",
+        "api_prefix": "",  # API 不修改
+        "download_prefix": "",  # 不使用前缀拼接
+        "direct_download_url": "https://dl.hungrym0.top/fuck-wjx_latest_setup.exe",
+    },
     "github": {
         "label": "GitHub 原始地址",
         "api_prefix": "",  # 不修改 API 地址
@@ -441,4 +447,4 @@ GITHUB_MIRROR_SOURCES = {
         "download_prefix": "https://ghproxy.net/",
     },
 }
-DEFAULT_GITHUB_MIRROR = "github"
+DEFAULT_GITHUB_MIRROR = "official"

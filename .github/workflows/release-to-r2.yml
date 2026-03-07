@@ -45,7 +45,7 @@ jobs:
           echo "Uploading: ${FILE}"
 
           aws s3 cp "${FILE}" \
-            "s3://${R2_BUCKET}/fuck-wjx_latest.exe" \
+            "s3://${R2_BUCKET}/fuck-wjx_latest_setup.exe" \
             --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
       - name: Upload versioned copy to R2
@@ -67,7 +67,7 @@ jobs:
       - name: Show download URLs
         run: |
           echo "Latest:"
-          echo "https://dl.hungrym0.top/fuck-wjx_latest.exe"
+          echo "https://dl.hungrym0.top/fuck-wjx_latest_setup.exe"
           echo
           echo "Versioned:"
           echo "https://dl.hungrym0.top/fuck-wjx_${{ github.event.release.tag_name }}.exe"
