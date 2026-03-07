@@ -537,6 +537,11 @@ class RunController(QObject):
         config_title = str(getattr(config, "survey_title", "") or "")
         fallback_title = str(getattr(self, "survey_title", "") or "")
         survey_title = config_title or fallback_title
+        try:
+            psycho_target_alpha = float(getattr(config, "psycho_target_alpha", 0.85) or 0.85)
+        except Exception:
+            psycho_target_alpha = 0.85
+        psycho_target_alpha = max(0.70, min(0.95, psycho_target_alpha))
 
         # ── 构建 TaskContext 实例 ─────────────────────────────────────────
         ctx = TaskContext(
@@ -560,6 +565,7 @@ class RunController(QObject):
             user_agent_pool_keys=list(config.random_ua_keys),
             user_agent_ratios=dict(getattr(config, "random_ua_ratios", {"wechat": 33, "mobile": 33, "pc": 34})),
             answer_rules=copy.deepcopy(getattr(config, "answer_rules", []) or []),
+            psycho_target_alpha=psycho_target_alpha,
             stop_on_fail_enabled=config.fail_stop_enabled,
             pause_on_aliyun_captcha=bool(getattr(config, "pause_on_aliyun_captcha", True)),
         )
@@ -721,6 +727,7 @@ class RunController(QObject):
             ctx.question_config_index_map = pending.question_config_index_map
             ctx.question_dimension_map = pending.question_dimension_map
             ctx.question_reverse_map = pending.question_reverse_map
+            ctx.question_psycho_bias_map = pending.question_psycho_bias_map
             ctx.questions_metadata = pending.questions_metadata
             self._pending_question_ctx = None
         self._task_ctx = ctx

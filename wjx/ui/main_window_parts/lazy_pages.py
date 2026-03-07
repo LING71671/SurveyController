@@ -29,10 +29,9 @@ class MainWindowLazyPagesMixin:
         answer_rules_page: AnswerRulesPage
         stackedWidget: QStackedWidget
         navigationInterface: Any  # qfluentwidgets.NavigationInterface
-
-        def addSubInterface(self, interface: QWidget, icon: Any, text: str, position: Any = ..., parent: Any = None, isTransparent: bool = False) -> Any: ...
-        def switchTo(self, interface: QWidget) -> None: ...
-        def close(self) -> bool: ...  # 继承自 QWidget
+        addSubInterface: Any
+        switchTo: Any
+        close: Any  # 继承自 QWidget
 
     def _init_navigation(self):
         self.addSubInterface(self.dashboard, FluentIcon.HOME, "概览", NavigationItemPosition.TOP)

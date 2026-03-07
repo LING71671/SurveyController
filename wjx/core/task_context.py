@@ -57,8 +57,14 @@ class TaskContext:
     # 题号 → 是否为反向题（scale/score 为 bool；matrix 为 List[bool]，每行一个）
     question_reverse_map: Dict[int, Any] = field(default_factory=dict)
 
+    # 题号 → 倾向预设（scale/score 为 str；matrix 为 List[str]，每行一个）
+    question_psycho_bias_map: Dict[int, Any] = field(default_factory=dict)
+
     # 题目元数据（从 HTML 解析得到）：题号 → 题目信息字典
     questions_metadata: Dict[int, Dict[str, Any]] = field(default_factory=dict)
+
+    # 心理测量计划目标 Alpha（0.70-0.95）
+    psycho_target_alpha: float = 0.85
 
     # ── 并发 / 浏览器配置 ─────────────────────────────────────────────────
     headless_mode: bool = False

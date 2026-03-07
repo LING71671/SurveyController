@@ -225,6 +225,7 @@ def configure_probabilities(
     _target.question_config_index_map = {}
     _target.question_dimension_map = {}
     _target.question_reverse_map = {}
+    _target.question_psycho_bias_map = {}
 
     # 各题型的当前索引,用于构建 question_config_index_map
     _idx_single = 0
@@ -275,6 +276,11 @@ def configure_probabilities(
                 _target.question_reverse_map[question_num] = list(_row_flags)
             else:
                 _target.question_reverse_map[question_num] = bool(getattr(entry, "is_reverse", False))
+            bias_value = getattr(entry, "psycho_bias", "custom")
+            if isinstance(bias_value, list):
+                _target.question_psycho_bias_map[question_num] = list(bias_value)
+            else:
+                _target.question_psycho_bias_map[question_num] = str(bias_value or "custom")
             _idx_matrix += rows
             option_count = max(1, _infer_option_count(entry))
 
@@ -327,6 +333,7 @@ def configure_probabilities(
             _target.question_config_index_map[question_num] = (entry.question_type, _idx_scale)
             _target.question_dimension_map[question_num] = _RELIABILITY_GLOBAL_DIMENSION if reliability_mode_enabled else None
             _target.question_reverse_map[question_num] = getattr(entry, "is_reverse", False)
+            _target.question_psycho_bias_map[question_num] = str(getattr(entry, "psycho_bias", "custom") or "custom")
             _idx_scale += 1
             _target.scale_prob.append(_normalize_single_like_prob_config(probs, entry.option_count))
         elif entry.question_type == "slider":

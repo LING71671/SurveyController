@@ -1,5 +1,5 @@
 """矩阵题处理"""
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
 from wjx.network.browser import By, BrowserDriver
 from wjx.core.questions.tendency import get_tendency_index
@@ -7,7 +7,16 @@ from wjx.core.persona.context import record_answer
 from wjx.core.questions.consistency import apply_matrix_row_consistency
 
 
-def matrix(driver: BrowserDriver, current: int, index: int, matrix_prob_config: List, dimension: Optional[str] = None, is_reverse: Union[bool, List[bool]] = False) -> int:
+def matrix(
+    driver: BrowserDriver,
+    current: int,
+    index: int,
+    matrix_prob_config: List,
+    dimension: Optional[str] = None,
+    is_reverse: Union[bool, List[bool]] = False,
+    psycho_plan: Optional[Any] = None,
+    question_index: Optional[int] = None,
+) -> int:
     """矩阵题处理主函数，返回更新后的索引。
 
     is_reverse 可以是：
@@ -43,13 +52,37 @@ def matrix(driver: BrowserDriver, current: int, index: int, matrix_prob_config: 
             if len(probs) != len(candidate_columns):
                 probs = [1.0] * len(candidate_columns)
             probs = apply_matrix_row_consistency(probs, current, row_index - 1)
-            selected_column = candidate_columns[get_tendency_index(len(candidate_columns), probs, dimension=dimension, is_reverse=row_is_reverse)]
+            selected_column = candidate_columns[get_tendency_index(
+                len(candidate_columns),
+                probs,
+                dimension=dimension,
+                is_reverse=row_is_reverse,
+                psycho_plan=psycho_plan,
+                question_index=(question_index if question_index is not None else current),
+                row_index=row_index - 1,
+            )]
         else:
             uniform_probs = apply_matrix_row_consistency([1.0] * len(candidate_columns), current, row_index - 1)
             if any(p > 0 for p in uniform_probs):
-                selected_column = candidate_columns[get_tendency_index(len(candidate_columns), uniform_probs, dimension=dimension, is_reverse=row_is_reverse)]
+                selected_column = candidate_columns[get_tendency_index(
+                    len(candidate_columns),
+                    uniform_probs,
+                    dimension=dimension,
+                    is_reverse=row_is_reverse,
+                    psycho_plan=psycho_plan,
+                    question_index=(question_index if question_index is not None else current),
+                    row_index=row_index - 1,
+                )]
             else:
-                selected_column = candidate_columns[get_tendency_index(len(candidate_columns), -1, dimension=dimension, is_reverse=row_is_reverse)]
+                selected_column = candidate_columns[get_tendency_index(
+                    len(candidate_columns),
+                    -1,
+                    dimension=dimension,
+                    is_reverse=row_is_reverse,
+                    psycho_plan=psycho_plan,
+                    question_index=(question_index if question_index is not None else current),
+                    row_index=row_index - 1,
+                )]
         driver.find_element(
             By.CSS_SELECTOR, f"#drv{current}_{row_index} > td:nth-child({selected_column})"
         ).click()

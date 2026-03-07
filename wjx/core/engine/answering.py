@@ -2,7 +2,7 @@
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from wjx.core.task_context import TaskContext
 from wjx.core.engine.dom_helpers import (
@@ -33,8 +33,123 @@ from wjx.core.questions.types.text import (
 )
 from wjx.core.questions.consistency import reset_consistency_context
 from wjx.core.questions.tendency import reset_tendency
+from wjx.core.psychometrics import build_psychometric_plan
 from wjx.core.survey.parser import _should_treat_question_as_text_like
 from wjx.network.browser import BrowserDriver, By, NoSuchElementException
+
+
+_PSYCHO_BIAS_CHOICES = {"left", "center", "right"}
+
+
+def _resolve_option_count(probability_config: Any, metadata_fallback: int, default_value: int = 5) -> int:
+    """解析心理测量计划所需选项数。"""
+    if isinstance(probability_config, list) and probability_config:
+        return max(2, len(probability_config))
+    if metadata_fallback > 0:
+        return max(2, int(metadata_fallback))
+    return max(2, int(default_value))
+
+
+def _infer_bias_from_probabilities(probability_config: Any, option_count: int) -> str:
+    """当预设为 custom 时，根据当前权重大致推断 left/center/right。"""
+    if not isinstance(probability_config, list) or not probability_config:
+        return "center"
+
+    weights: List[float] = []
+    for raw in probability_config:
+        try:
+            weights.append(max(0.0, float(raw)))
+        except Exception:
+            weights.append(0.0)
+
+    total = sum(weights)
+    if total <= 0:
+        return "center"
+
+    denom = max(1, option_count - 1)
+    weighted_mean = sum(idx * weight for idx, weight in enumerate(weights)) / total
+    ratio = weighted_mean / denom
+    if ratio <= 0.4:
+        return "left"
+    if ratio >= 0.6:
+        return "right"
+    return "center"
+
+
+def _resolve_bias(raw_bias: Any, probability_config: Any, option_count: int) -> str:
+    if isinstance(raw_bias, str):
+        normalized = raw_bias.strip().lower()
+        if normalized in _PSYCHO_BIAS_CHOICES:
+            return normalized
+    return _infer_bias_from_probabilities(probability_config, option_count)
+
+
+def _build_psychometric_plan_for_run(ctx: TaskContext) -> Optional[Any]:
+    """根据当前任务配置构建本轮问卷的心理测量作答计划。"""
+    psycho_items: List[Tuple[int, str, int, str, Optional[int]]] = []
+
+    for question_num in sorted(ctx.question_config_index_map.keys()):
+        config_entry = ctx.question_config_index_map.get(question_num)
+        if not config_entry:
+            continue
+
+        question_type, start_index = config_entry
+        if ctx.question_dimension_map.get(question_num) is None:
+            continue
+
+        question_meta = ctx.questions_metadata.get(question_num) or {}
+        meta_option_count = int(question_meta.get("options") or 0)
+        saved_bias = ctx.question_psycho_bias_map.get(question_num, "custom")
+
+        if question_type in ("scale", "score"):
+            probability_config = ctx.scale_prob[start_index] if start_index < len(ctx.scale_prob) else -1
+            option_count = _resolve_option_count(probability_config, meta_option_count, default_value=5)
+            bias = _resolve_bias(saved_bias, probability_config, option_count)
+            psycho_items.append((question_num, question_type, option_count, bias, None))
+            continue
+
+        if question_type == "matrix":
+            row_count = int(question_meta.get("rows") or 0)
+            if row_count <= 0:
+                reverse_flags = ctx.question_reverse_map.get(question_num)
+                if isinstance(reverse_flags, list) and reverse_flags:
+                    row_count = len(reverse_flags)
+            if row_count <= 0:
+                row_count = 1
+
+            for row_idx in range(row_count):
+                matrix_prob_idx = start_index + row_idx
+                probability_config = (
+                    ctx.matrix_prob[matrix_prob_idx]
+                    if matrix_prob_idx < len(ctx.matrix_prob)
+                    else -1
+                )
+                option_count = _resolve_option_count(
+                    probability_config,
+                    meta_option_count,
+                    default_value=max(meta_option_count, 5),
+                )
+                row_bias = (
+                    saved_bias[row_idx]
+                    if isinstance(saved_bias, list) and row_idx < len(saved_bias)
+                    else saved_bias
+                )
+                bias = _resolve_bias(row_bias, probability_config, option_count)
+                psycho_items.append((question_num, "matrix", option_count, bias, row_idx))
+
+    if len(psycho_items) < 2:
+        return None
+
+    try:
+        target_alpha = float(getattr(ctx, "psycho_target_alpha", 0.85) or 0.85)
+    except Exception:
+        target_alpha = 0.85
+    target_alpha = max(0.70, min(0.95, target_alpha))
+
+    return build_psychometric_plan(
+        psycho_items=psycho_items,
+        target_alpha=target_alpha,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -80,18 +195,45 @@ class _QuestionDispatcher:
     def _handle_multiple(self, driver, q_num, idx, ctx: TaskContext):
         _multiple_impl(driver, q_num, idx, ctx.multiple_prob, ctx.multiple_option_fill_texts)
 
-    def _handle_scale(self, driver, q_num, idx, ctx: TaskContext, question_div=None):
+    def _handle_scale(self, driver, q_num, idx, ctx: TaskContext, question_div=None, psycho_plan=None):
         dim = ctx.question_dimension_map.get(q_num)
         is_rev = ctx.question_reverse_map.get(q_num, False)
         if question_div is not None and _driver_question_looks_like_rating(question_div):
-            _score_impl(driver, q_num, idx, ctx.scale_prob, dimension=dim, is_reverse=is_rev)
+            _score_impl(
+                driver,
+                q_num,
+                idx,
+                ctx.scale_prob,
+                dimension=dim,
+                is_reverse=is_rev,
+                psycho_plan=psycho_plan,
+                question_index=q_num,
+            )
         else:
-            _scale_impl(driver, q_num, idx, ctx.scale_prob, dimension=dim, is_reverse=is_rev)
+            _scale_impl(
+                driver,
+                q_num,
+                idx,
+                ctx.scale_prob,
+                dimension=dim,
+                is_reverse=is_rev,
+                psycho_plan=psycho_plan,
+                question_index=q_num,
+            )
 
-    def _handle_matrix(self, driver, q_num, idx, ctx: TaskContext):
+    def _handle_matrix(self, driver, q_num, idx, ctx: TaskContext, psycho_plan=None):
         dim = ctx.question_dimension_map.get(q_num)
         is_rev = ctx.question_reverse_map.get(q_num, False)
-        return _matrix_impl(driver, q_num, idx, ctx.matrix_prob, dimension=dim, is_reverse=is_rev)
+        return _matrix_impl(
+            driver,
+            q_num,
+            idx,
+            ctx.matrix_prob,
+            dimension=dim,
+            is_reverse=is_rev,
+            psycho_plan=psycho_plan,
+            question_index=q_num,
+        )
 
     def _handle_dropdown(self, driver, q_num, idx, ctx: TaskContext):
         _dropdown_impl(driver, q_num, idx, ctx.droplist_prob, ctx.droplist_option_fill_texts)
@@ -109,6 +251,7 @@ class _QuestionDispatcher:
         config_entry: Optional[Tuple[str, int]],
         indices: Dict[str, int],
         ctx: TaskContext,
+        psycho_plan: Optional[Any] = None,
     ) -> Optional[bool]:
         """分发题型并填写。"""
         is_reorder = (question_type == "11") or _driver_question_looks_like_reorder(question_div)
@@ -142,7 +285,22 @@ class _QuestionDispatcher:
         )
 
         if question_type == "5":  # scale / score 需要传 question_div
-            result = handler(driver, question_num, _idx, ctx, question_div=question_div)
+            result = handler(
+                driver,
+                question_num,
+                _idx,
+                ctx,
+                question_div=question_div,
+                psycho_plan=psycho_plan,
+            )
+        elif question_type == "6":  # matrix 需要传 psycho_plan
+            result = handler(
+                driver,
+                question_num,
+                _idx,
+                ctx,
+                psycho_plan=psycho_plan,
+            )
         else:
             result = handler(driver, question_num, _idx, ctx)
 
@@ -169,6 +327,13 @@ def brush(
     _reset_answer_context()
     reset_tendency()
     reset_consistency_context(ctx.answer_rules)
+    psycho_plan = _build_psychometric_plan_for_run(ctx)
+    if psycho_plan is not None:
+        logging.debug(
+            "本轮启用心理测量计划：题目数=%d，目标α=%.2f",
+            len(getattr(psycho_plan, "items", []) or []),
+            float(getattr(ctx, "psycho_target_alpha", 0.85) or 0.85),
+        )
     logging.debug("本轮画像：%s", persona.to_description())
     questions_per_page = detect(driver, stop_signal=stop_signal)
     fast_mode = _is_fast_mode(ctx)
@@ -244,6 +409,7 @@ def brush(
                 config_entry=_config_entry,
                 indices=_indices,
                 ctx=ctx,
+                psycho_plan=psycho_plan,
             )
 
             if dispatch_result is False:
