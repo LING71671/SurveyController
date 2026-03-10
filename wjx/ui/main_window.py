@@ -160,6 +160,11 @@ class MainWindow(
         self._bind_controller_signals()
         # 确保初始 adapter 也能回调随机 IP 计数
         self.controller.adapter.update_random_ip_counter = self.dashboard.update_random_ip_counter
+        self.controller.on_random_ip_loading = self.dashboard.set_random_ip_loading
+        try:
+            self.controller.adapter._on_random_ip_loading = self.dashboard.set_random_ip_loading
+        except Exception as exc:
+            log_suppressed_exception("__init__: sync adapter random_ip_loading callback", exc, level=logging.WARNING)
         self._register_popups()
         self._load_saved_config()
         self._center_on_screen()

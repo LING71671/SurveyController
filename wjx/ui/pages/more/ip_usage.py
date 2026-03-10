@@ -10,6 +10,7 @@ from wjx.network.proxy.auth import (
     RandomIPAuthError,
     claim_easter_egg_bonus,
     format_random_ip_error,
+    get_quota_snapshot,
     get_fresh_quota_snapshot,
     has_authenticated_session,
 )
@@ -649,13 +650,25 @@ class IpUsagePage(ScrollArea):
 
     def _load_quota_summary(self):
         def _do():
+            cached_snapshot = get_quota_snapshot()
+            cached_remaining = int(cached_snapshot.get("remaining_quota") or 0)
+            cached_total = int(cached_snapshot.get("total_quota") or 0)
             try:
                 if not has_authenticated_session():
-                    payload = {"authenticated": False}
+                    if cached_total > 0:
+                        payload = {
+                            "authenticated": False,
+                            "cached": True,
+                            "remaining_quota": cached_remaining,
+                            "total_quota": cached_total,
+                        }
+                    else:
+                        payload = {"authenticated": False}
                 else:
                     snapshot = get_fresh_quota_snapshot()
                     payload = {
                         "authenticated": True,
+                        "cached": False,
                         "remaining_quota": int(snapshot.get("remaining_quota") or 0),
                         "total_quota": int(snapshot.get("total_quota") or 0),
                     }
@@ -664,6 +677,19 @@ class IpUsagePage(ScrollArea):
                 except Exception as exc:
                     log_suppressed_exception("_load_quota_summary emit", exc, level=logging.WARNING)
             except Exception as exc:
+                if cached_total > 0:
+                    try:
+                        self._quotaLoaded.emit(
+                            {
+                                "authenticated": False,
+                                "cached": True,
+                                "remaining_quota": cached_remaining,
+                                "total_quota": cached_total,
+                            }
+                        )
+                        return
+                    except Exception as emit_exc:
+                        log_suppressed_exception("_load_quota_summary emit cached", emit_exc, level=logging.WARNING)
                 try:
                     self._quotaLoaded.emit({"error": str(exc)})
                 except Exception as emit_exc:
@@ -676,11 +702,15 @@ class IpUsagePage(ScrollArea):
         if data.get("error"):
             self._ip_balance_label.setText("随机IP额度：同步失败")
             return
+        remaining = self._to_int(data.get("remaining_quota"))
+        total = self._to_int(data.get("total_quota"))
+        if total > 0:
+            suffix = "（缓存）" if data.get("cached") else ""
+            self._ip_balance_label.setText(f"随机IP额度：{remaining}/{total}{suffix}")
+            return
         if not data.get("authenticated"):
             self._ip_balance_label.setText("随机IP额度：未激活")
             return
-        remaining = self._to_int(data.get("remaining_quota"))
-        total = self._to_int(data.get("total_quota"))
         self._ip_balance_label.setText(f"随机IP额度：{remaining}/{total}")
 
     def _set_loading(self, loading: bool) -> None:

@@ -40,6 +40,7 @@ class EngineGuiAdapter:
         stop_signal: threading.Event,
         card_code_provider: Optional[Callable[[], Optional[str]]] = None,
         on_ip_counter: Optional[Callable[[int, int, bool], None]] = None,
+        on_random_ip_loading: Optional[Callable[[bool, str], None]] = None,
         async_dispatcher: Optional[Callable[[Callable[[], None]], None]] = None,
         cleanup_runner: Optional[CleanupRunner] = None,
     ):
@@ -50,6 +51,7 @@ class EngineGuiAdapter:
         self._stop_signal = stop_signal
         self._card_code_provider = card_code_provider
         self.update_random_ip_counter = on_ip_counter
+        self._on_random_ip_loading = on_random_ip_loading
         self.task_ctx: Optional[TaskContext] = None
         self._pause_event = threading.Event()
         self._pause_reason = ""
@@ -108,6 +110,19 @@ class EngineGuiAdapter:
                 logging.warning("获取卡密失败，返回空值", exc_info=True)
                 return None
         return None
+
+    def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
+        callback = self._on_random_ip_loading
+        if not callable(callback):
+            return
+
+        def _apply() -> None:
+            try:
+                callback(bool(loading), str(message or ""))
+            except Exception:
+                logging.debug("更新随机IP加载状态失败", exc_info=True)
+
+        self._post_to_ui_thread_async(_apply)
 
     def cleanup_browsers(self) -> None:
         drivers = list(self.active_drivers or [])

@@ -64,6 +64,17 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         super().__init__(FluentIcon.GLOBE, "随机 IP", "使用代理 IP 来模拟不同地区的访问，并绕过智能验证", parent)
 
         # 开关
+        self.loadingRing = IndeterminateProgressRing(self)
+        self.loadingRing.setFixedSize(18, 18)
+        self.loadingRing.setStrokeWidth(2)
+        self.loadingRing.hide()
+        self.addWidget(self.loadingRing)
+
+        self.loadingLabel = BodyLabel("", self)
+        self.loadingLabel.setStyleSheet("color: #606060; font-size: 12px;")
+        self.loadingLabel.hide()
+        self.addWidget(self.loadingLabel)
+
         self.switchButton = SwitchButton(self, IndicatorPosition.RIGHT)
         self.switchButton.setOnText("开")
         self.switchButton.setOffText("关")
@@ -400,6 +411,13 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
             eff = QGraphicsOpacityEffect(self.areaRow)
             self.areaRow.setGraphicsEffect(eff)
         eff.setOpacity(1.0 if enabled else 0.4)  # type: ignore[union-attr]
+
+    def setLoading(self, loading: bool, message: str = "") -> None:
+        active = bool(loading)
+        self.loadingRing.setVisible(active)
+        self.loadingLabel.setVisible(active)
+        self.loadingLabel.setText(str(message or "正在处理...") if active else "")
+        self.switchButton.setEnabled(not active)
 
 
 class TimedModeSettingCard(SettingCard):

@@ -18,7 +18,6 @@ from wjx.network.proxy import (
     get_status,
     on_random_ip_toggle,
     refresh_ip_counter_display,
-    show_random_ip_activation_dialog,
 )
 from wjx.ui.dialogs.card_unlock import CardUnlockDialog
 from wjx.ui.dialogs.contact import ContactDialog
@@ -65,19 +64,32 @@ class DashboardRandomIPMixin:
         except Exception as exc:
             log_suppressed_exception("_set_runtime_ip_switch", exc, level=logging.WARNING)
 
+    def set_random_ip_loading(self, loading: bool, message: str = "") -> None:
+        active = bool(loading)
+        text = str(message or "正在处理...") if active else ""
+        try:
+            self.random_ip_loading_ring.setVisible(active)
+            self.random_ip_loading_label.setVisible(active)
+            self.random_ip_loading_label.setText(text)
+            self.random_ip_cb.setEnabled(not active)
+        except Exception as exc:
+            log_suppressed_exception("set_random_ip_loading dashboard", exc, level=logging.WARNING)
+        try:
+            if hasattr(self.runtime_page, "random_ip_card"):
+                self.runtime_page.random_ip_card.setLoading(active, text)
+        except Exception as exc:
+            log_suppressed_exception("set_random_ip_loading runtime", exc, level=logging.WARNING)
+
     def update_random_ip_counter(self, count: int, limit: int, custom_api: bool):
         authenticated = has_authenticated_session()
         remaining = max(0, int(limit or 0) - int(count or 0))
+        self.card_btn.setEnabled(True)
+        self.card_btn.setText("解锁更高额度")
+        self.card_btn.setIcon(FluentIcon.FINGERPRINT)
         if authenticated:
-            self.card_btn.setEnabled(True)
-            self.card_btn.setText("重新激活")
-            self.card_btn.setIcon(FluentIcon.SYNC)
-            self.card_btn.setToolTip("重新核销卡密可刷新当前设备的随机IP登录状态")
+            self.card_btn.setToolTip("输入卡密可补充更高的随机IP额度")
         else:
-            self.card_btn.setEnabled(True)
-            self.card_btn.setText("领取试用/激活")
-            self.card_btn.setIcon(FluentIcon.FINGERPRINT)
-            self.card_btn.setToolTip("可先领取一次免费试用，领过后再使用卡密激活")
+            self.card_btn.setToolTip("勾选随机IP会自动尝试试用激活；这里可直接输入卡密解锁更高额度")
 
         if custom_api:
             self.random_ip_hint.setText("自定义接口")
@@ -212,24 +224,18 @@ class DashboardRandomIPMixin:
         dlg.exec()
 
     def _on_card_code_clicked(self):
-        """用户主动输入卡密解锁大额随机IP。"""
-        if has_authenticated_session():
-            dialog = CardUnlockDialog(
-                self,
-                status_fetcher=get_status,
-                status_formatter=_format_status_payload,
-                contact_handler=lambda: self._open_contact_dialog(default_type="卡密获取"),
-                card_validator=_validate_card,
-            )
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            activated = bool(dialog.get_validation_result())
-        else:
-            activated = bool(show_random_ip_activation_dialog(self.controller.adapter))
-        if activated:
+        """用户主动输入卡密解锁更高随机IP额度。"""
+        dialog = CardUnlockDialog(
+            self,
+            status_fetcher=get_status,
+            status_formatter=_format_status_payload,
+            contact_handler=lambda: self._open_contact_dialog(default_type="卡密获取"),
+            card_validator=_validate_card,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if bool(dialog.get_validation_result()):
             refresh_ip_counter_display(self.controller.adapter)
-            self.random_ip_cb.setChecked(True)
-            self._set_runtime_ip_switch(True)
 
     def _on_ip_low_infobar_closed(self):
         self._ip_low_infobar_dismissed = True

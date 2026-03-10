@@ -5,9 +5,7 @@ import logging
 import threading
 from typing import Any, Callable, Optional
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, IndeterminateProgressRing
+from PySide6.QtCore import QEventLoop, QTimer
 
 from wjx.network.proxy.auth import (
     RandomIPAuthError,
@@ -29,22 +27,16 @@ from wjx.utils.logging.log_utils import (
 )
 
 
-def _resolve_loading_parent(gui: Any) -> Optional[QWidget]:
-    candidate = gui
-    if isinstance(candidate, QWidget):
-        return candidate.window() or candidate
-    window_getter = getattr(gui, "window", None) if gui is not None else None
-    if callable(window_getter):
-        try:
-            parent = window_getter()
-            if isinstance(parent, QWidget):
-                return parent
-        except Exception:
-            logging.debug("获取加载框父窗口失败", exc_info=True)
-    active = QApplication.activeWindow()
-    if isinstance(active, QWidget):
-        return active
-    return None
+def _set_random_ip_loading(gui: Any, loading: bool, message: str = "") -> None:
+    if gui is None:
+        return
+    handler = getattr(gui, "set_random_ip_loading", None)
+    if not callable(handler):
+        return
+    try:
+        handler(bool(loading), str(message or ""))
+    except Exception:
+        logging.debug("更新随机IP加载提示失败", exc_info=True)
 
 
 def _run_with_loading_dialog(
@@ -54,8 +46,7 @@ def _run_with_loading_dialog(
     message: str,
     worker: Callable[[], Any],
 ) -> Any:
-    parent = _resolve_loading_parent(gui)
-    if parent is None:
+    if gui is None or threading.current_thread() is not threading.main_thread():
         return worker()
 
     result: dict[str, Any] = {}
@@ -69,39 +60,24 @@ def _run_with_loading_dialog(
         finally:
             done.set()
 
-    dialog = QDialog(parent)
-    dialog.setWindowTitle(title)
-    dialog.setModal(True)
-    dialog.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
-    dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
-    dialog.setMinimumWidth(320)
+    _set_random_ip_loading(gui, True, message)
+    threading.Thread(target=_background, daemon=True, name="RandomIPLoadingWorker").start()
 
-    layout = QVBoxLayout(dialog)
-    layout.setContentsMargins(24, 20, 24, 20)
-    layout.setSpacing(12)
-
-    ring = IndeterminateProgressRing(dialog)
-    ring.setFixedSize(36, 36)
-    ring.setStrokeWidth(3)
-    layout.addWidget(ring, 0, Qt.AlignmentFlag.AlignHCenter)
-
-    label = BodyLabel(message, dialog)
-    label.setWordWrap(True)
-    layout.addWidget(label, 0, Qt.AlignmentFlag.AlignHCenter)
-
-    timer = QTimer(dialog)
+    loop = QEventLoop()
+    timer = QTimer()
     timer.setInterval(50)
 
     def _poll_done() -> None:
         if done.is_set():
             timer.stop()
-            dialog.accept()
+            loop.quit()
 
     timer.timeout.connect(_poll_done)
     timer.start()
-
-    threading.Thread(target=_background, daemon=True, name="RandomIPLoadingWorker").start()
-    dialog.exec()
+    try:
+        loop.exec()
+    finally:
+        _set_random_ip_loading(gui, False, "")
 
     if "error" in result:
         raise result["error"]
@@ -186,7 +162,7 @@ def on_random_ip_toggle(gui: Any) -> None:
         snapshot = _run_with_loading_dialog(
             gui,
             title="随机IP校验中",
-            message="正在校验随机IP额度，请稍候...",
+            message="正在校验额度...",
             worker=get_fresh_quota_snapshot,
         )
     except Exception as exc:
@@ -219,7 +195,7 @@ def _try_activate_trial(gui: Any = None) -> tuple[bool, bool]:
         session = _run_with_loading_dialog(
             gui,
             title="领取试用中",
-            message="正在领取随机IP免费试用，请稍候...",
+            message="正在领取试用...",
             worker=activate_trial,
         )
     except RandomIPAuthError as exc:
@@ -244,40 +220,36 @@ def _try_activate_trial(gui: Any = None) -> tuple[bool, bool]:
 
 def show_random_ip_activation_dialog(gui: Any = None) -> bool:
     if has_authenticated_session():
-        return show_card_validation_dialog(gui)
+        return True
 
-    prompt = (
-        "默认随机IP现已支持一次免费试用。\n\n"
-        "是否立即领取免费试用？\n"
-        "取消则进入卡密激活流程。"
-    )
-    wants_trial = bool(_invoke_popup(gui, "confirm", "随机IP试用", prompt))
-    if wants_trial:
-        activated, should_fallback_to_card = _try_activate_trial(gui)
-        if activated:
-            return True
-        if not should_fallback_to_card:
-            return False
-
-    return show_card_validation_dialog(gui)
-
-
-def show_card_validation_dialog(gui: Any = None) -> bool:
-    prompt = (
-        "默认随机IP现已改为账号鉴权。\n\n"
-        "请输入卡密激活随机IP服务；若暂时不想激活，可取消后继续使用自定义代理接口。"
-    )
-    if not _invoke_popup(gui, "confirm", "随机IP激活", prompt):
+    activated, should_fallback_to_card = _try_activate_trial(gui)
+    if activated:
+        return True
+    if not should_fallback_to_card:
         return False
+
+    return show_card_validation_dialog(gui, require_confirm=False)
+
+
+def show_card_validation_dialog(gui: Any = None, *, require_confirm: bool = True) -> bool:
+    if require_confirm:
+        prompt = (
+            "默认随机IP现已改为账号鉴权。\n\n"
+            "请输入卡密激活随机IP服务；若暂时不想激活，可取消后继续使用自定义代理接口。"
+        )
+        if not _invoke_popup(gui, "confirm", "随机IP激活", prompt):
+            return False
     code_getter = getattr(gui, "request_card_code", None)
     if not callable(code_getter):
         log_popup_warning("需要卡密", "请在界面中输入卡密激活随机IP服务")
         return False
     card_code = code_getter()
+    if not str(card_code or "").strip():
+        return False
     ok, remaining = _run_with_loading_dialog(
         gui,
         title="核销卡密中",
-        message="正在核销随机IP卡密，请稍候...",
+        message="正在核销卡密...",
         worker=lambda: _validate_card(str(card_code) if card_code else ""),
     )
     if ok:

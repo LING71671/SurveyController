@@ -62,6 +62,7 @@ class RunControllerRuntimeMixin:
             stop_signal,
             card_code_provider=getattr(self, "card_code_provider", None),
             on_ip_counter=getattr(self, "on_ip_counter", None),
+            on_random_ip_loading=getattr(self, "on_random_ip_loading", None),
             async_dispatcher=self._dispatch_to_ui_async,
             cleanup_runner=self._cleanup_runner,
         )

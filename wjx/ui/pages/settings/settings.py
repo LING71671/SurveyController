@@ -262,7 +262,7 @@ class SettingsPage(ScrollArea):
         # 动态设置日志级别
         set_debug_mode(checked)
 
-        # 调试模式切换后，立即刷新主页“解锁大额IP”按钮可用性
+        # 调试模式切换后，立即刷新主页“解锁更高额度”按钮状态
         try:
             from wjx.network.proxy import get_random_ip_counter_snapshot_local
 
