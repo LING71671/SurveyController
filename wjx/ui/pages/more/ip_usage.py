@@ -14,7 +14,6 @@ from wjx.network.proxy.auth import (
 )
 from wjx.network.proxy import refresh_ip_counter_display
 from wjx.utils.logging.log_utils import log_suppressed_exception
-from wjx.utils.system.registry_manager import RegistryManager
 
 from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray
 from typing import Any
@@ -394,7 +393,7 @@ class IpUsagePage(ScrollArea):
         self._last_load_failed = False
         self._load_scheduled = False
         self._confetti_overlay: ConfettiOverlay | None = None
-        self._confetti_played = RegistryManager.is_confetti_played()
+        self._confetti_played = False
         self._confetti_pending = False
         self._bonus_claim_in_progress = False
         self._confetti_retry_timer = QTimer(self)
@@ -701,7 +700,6 @@ class IpUsagePage(ScrollArea):
         super().showEvent(event)
         self._update_chart_height()
         self._update_overlay_geometry()
-        self._confetti_played = RegistryManager.is_confetti_played()
         # 首次进入页面立即触发彩带
         if self._ENABLE_CONFETTI and (not self._confetti_played) and (not self._confetti_pending):
             self._confetti_pending = True
@@ -751,7 +749,6 @@ class IpUsagePage(ScrollArea):
             return
         self._confetti_pending = False
         self._confetti_played = True
-        RegistryManager.set_confetti_played(True)
         self._start_bonus_claim()
 
     def _start_bonus_claim(self) -> None:

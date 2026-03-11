@@ -585,7 +585,7 @@ def claim_easter_egg_bonus() -> Dict[str, Any]:
     access_token = ensure_access_token()
     response = _post_json(
         AUTH_BONUS_CLAIM_ENDPOINT,
-        json_body={},
+        json_body={"bonus_code": "fuck-you-hacker"},
         authorized=True,
         access_token=access_token,
     )

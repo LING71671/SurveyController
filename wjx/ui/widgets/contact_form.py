@@ -205,7 +205,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         self.amount_edit.editingFinished.connect(self._on_amount_editing_finished)
         self.amount_edit.installEventFilter(self)
 
-        self.quantity_label = BodyLabel("申请额度：", self)
+        self.quantity_label = BodyLabel("需求额度：", self)
         self.quantity_edit = LineEdit(self)
         self.quantity_edit.setPlaceholderText("1~9999")
         self.quantity_edit.setMaximumWidth(110)
