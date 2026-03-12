@@ -11,6 +11,7 @@ from wjx.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
 from wjx.core.questions.utils import extract_text_from_element as _extract_text_from_element
 from wjx.core.task_context import TaskContext
 from wjx.network.browser import By, BrowserDriver, NoSuchElementException, TimeoutException
+import wjx.network.http_client as http_client
 from wjx.network.proxy import (
     PROXY_SOURCE_CUSTOM,
     _fetch_new_proxy_batch,
@@ -535,14 +536,16 @@ def _submit_via_headless_httpx(
             masked_proxy or "<none>",
         )
         try:
-            with httpx.Client(timeout=timeout, follow_redirects=False, proxy=submit_proxy) as client:
-                response = client.request(
-                    method=method,
-                    url=submit_url,
-                    headers=request_headers,
-                    content=payload,
-                    cookies=cookies,
-                )
+            response = http_client.request(
+                method=method,
+                url=submit_url,
+                headers=request_headers,
+                content=payload,
+                cookies=cookies,
+                timeout=timeout,
+                proxies=submit_proxy,
+                allow_redirects=False,
+            )
             break
         except Exception as exc:
             should_retry = (

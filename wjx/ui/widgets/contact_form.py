@@ -810,6 +810,15 @@ class ContactForm(StatusPollingMixin, QWidget):
             return
 
         self.refresh_random_ip_user_id_hint()
+        if mtype == REQUEST_MESSAGE_TYPE and self._random_ip_user_id <= 0:
+            InfoBar.warning(
+                "",
+                "暂时还不能申请额度。请先小测试一两份，确认能正常提交成功后，再来申请额度。",
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=3000,
+            )
+            return
         version_str = __VERSION__
         full_message = f"来源：fuck-wjx v{version_str}\n类型：{mtype}\n"
         if email:

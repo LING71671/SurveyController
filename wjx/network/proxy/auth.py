@@ -405,26 +405,42 @@ def _post_json(url: str, *, json_body: Dict[str, Any], authorized: bool = False,
         raise RandomIPAuthError(f"network_error:{exc}") from exc
 
 
-def _parse_session_response(response: Any) -> RandomIPSession:
+def _parse_session_payload(
+    data: Dict[str, Any],
+    *,
+    device_id: str,
+    fallback_session: Optional[RandomIPSession] = None,
+) -> RandomIPSession:
+    fallback = fallback_session or RandomIPSession(device_id=device_id)
+    if "user_id" not in data:
+        raise RandomIPAuthError("invalid_response:user_id_missing")
+    session = RandomIPSession(
+        device_id=device_id,
+        user_id=_to_non_negative_int(data.get("user_id"), 0),
+        access_token=str(data.get("access_token") or "").strip(),
+        refresh_token=str(data.get("refresh_token") or "").strip(),
+        expires_at=_parse_datetime(data.get("expires_at")),
+        refresh_expires_at=_parse_datetime(data.get("refresh_expires_at")),
+        remaining_quota=_to_non_negative_int(data.get("remaining_quota"), fallback.remaining_quota),
+        total_quota=max(
+            _to_non_negative_int(data.get("total_quota"), fallback.total_quota),
+            _to_non_negative_int(data.get("remaining_quota"), fallback.remaining_quota),
+        ),
+    )
+    if not session.refresh_token:
+        raise RandomIPAuthError("invalid_response")
+    return session
+
+
+def _parse_session_response(response: Any, *, fallback_session: Optional[RandomIPSession] = None) -> RandomIPSession:
     try:
         data = response.json()
     except Exception as exc:
         raise RandomIPAuthError(f"invalid_response:{exc}") from exc
     if not isinstance(data, dict):
         raise RandomIPAuthError("invalid_response")
-    session = RandomIPSession(
-        device_id=get_device_id(),
-        user_id=_to_non_negative_int(data.get("user_id"), 0),
-        access_token=str(data.get("access_token") or "").strip(),
-        refresh_token=str(data.get("refresh_token") or "").strip(),
-        expires_at=_parse_datetime(data.get("expires_at")),
-        refresh_expires_at=_parse_datetime(data.get("refresh_expires_at")),
-        remaining_quota=_to_non_negative_int(data.get("remaining_quota"), 0),
-        total_quota=_to_non_negative_int(data.get("total_quota"), _to_non_negative_int(data.get("remaining_quota"), 0)),
-    )
-    if not session.refresh_token:
-        raise RandomIPAuthError("invalid_response")
-    return session
+    device_id = fallback_session.device_id if fallback_session is not None else get_device_id()
+    return _parse_session_payload(data, device_id=device_id, fallback_session=fallback_session)
 
 
 def activate_trial() -> RandomIPSession:
@@ -457,27 +473,7 @@ def refresh_session(*, force: bool = False) -> RandomIPSession:
         if error.detail == "invalid_refresh_token":
             clear_session()
         raise error
-    try:
-        data = response.json()
-    except Exception as exc:
-        raise RandomIPAuthError(f"invalid_response:{exc}") from exc
-    if not isinstance(data, dict):
-        raise RandomIPAuthError("invalid_response")
-    refreshed = RandomIPSession(
-        device_id=session.device_id,
-        user_id=_to_non_negative_int(data.get("user_id"), session.user_id),
-        access_token=str(data.get("access_token") or "").strip(),
-        refresh_token=str(data.get("refresh_token") or "").strip(),
-        expires_at=_parse_datetime(data.get("expires_at")),
-        refresh_expires_at=_parse_datetime(data.get("refresh_expires_at")),
-        remaining_quota=_to_non_negative_int(data.get("remaining_quota"), session.remaining_quota),
-        total_quota=max(
-            _to_non_negative_int(data.get("total_quota"), session.total_quota),
-            _to_non_negative_int(data.get("remaining_quota"), session.remaining_quota),
-        ),
-    )
-    if not refreshed.refresh_token:
-        raise RandomIPAuthError("invalid_refresh_token")
+    refreshed = _parse_session_response(response, fallback_session=session)
     return _set_session(refreshed)
 
 

@@ -26,6 +26,7 @@ class DashboardProgressMixin:
 
     THREAD_VIEW_QUESTION_LIST = "question_list"
     THREAD_VIEW_PROGRESS = "thread_progress"
+    _THREAD_BUSY_STATUSES = {"提交中", "等待结果确认"}
 
     if TYPE_CHECKING:
         controller: RunController
@@ -251,6 +252,20 @@ class DashboardProgressMixin:
         self.thread_progress_hint.show()
         self.thread_progress_hint.setText("线程进度会在任务开始后显示")
 
+    def _set_thread_step_busy(self, row: Dict[str, Any], busy: bool) -> None:
+        step_bar = row.get("step_bar")
+        step_busy_bar = row.get("step_busy_bar")
+        if bool(busy):
+            if step_bar is not None:
+                step_bar.hide()
+            if step_busy_bar is not None:
+                step_busy_bar.show()
+            return
+        if step_busy_bar is not None:
+            step_busy_bar.hide()
+        if step_bar is not None:
+            step_bar.show()
+
     def _create_thread_progress_row(self, thread_name: str) -> Dict[str, Any]:
         row_widget = QWidget(self.thread_progress_rows_container)
         row_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
@@ -280,11 +295,14 @@ class DashboardProgressMixin:
         step_bar = ProgressBar(row_widget)
         step_bar.setRange(0, 100)
         step_bar.setValue(0)
+        step_busy_bar = IndeterminateProgressBar(start=True, parent=row_widget)
+        step_busy_bar.hide()
         step_value = BodyLabel("0/0", row_widget)
         step_value.setMinimumWidth(58)
         step_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
         step_layout.addWidget(step_prefix)
         step_layout.addWidget(step_bar, 1)
+        step_layout.addWidget(step_busy_bar, 1)
         step_layout.addWidget(step_value)
         row_layout.addLayout(step_layout)
 
@@ -311,6 +329,7 @@ class DashboardProgressMixin:
             "status": status_label,
             "counter": counter_label,
             "step_bar": step_bar,
+            "step_busy_bar": step_busy_bar,
             "step_value": step_value,
             "cum_bar": cumulative_bar,
             "cum_value": cumulative_value,
@@ -388,9 +407,11 @@ class DashboardProgressMixin:
             else:
                 step_percent = 0
             cumulative_percent = int(min(100, (success_count / float(max(1, per_thread_target))) * 100))
+            step_busy = status_text in self._THREAD_BUSY_STATUSES
 
             row["status"].setText(status_text)
             row["counter"].setText(f"成功 {success_count} | 失败 {fail_count}")
+            self._set_thread_step_busy(row, step_busy)
             row["step_bar"].setValue(step_percent)
             row["step_value"].setText(f"{step_current}/{step_total}" if step_total > 0 else "0/0")
             row["cum_bar"].setValue(cumulative_percent)
