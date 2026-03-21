@@ -55,6 +55,7 @@ class DashboardProgressMixin:
         _last_pause_reason: str
         _main_progress_indeterminate: bool
         _last_device_quota_fail_count: int
+        _progress_paused_visual: bool
 
         def _sync_start_button_state(self, running: Optional[bool] = None) -> None: ...
         def _has_question_entries(self) -> bool: ...
@@ -67,10 +68,42 @@ class DashboardProgressMixin:
         self._thread_view_current = self.THREAD_VIEW_QUESTION_LIST
         self._main_progress_indeterminate = False
         self._last_device_quota_fail_count = 0
+        self._progress_paused_visual = False
         self._thread_clear_timer = QTimer(cast(QObject, self))
         self._thread_clear_timer.setSingleShot(True)
         self._thread_clear_timer.setInterval(4000)
         self._thread_clear_timer.timeout.connect(self._clear_thread_progress_rows)
+
+    def _set_progress_bar_paused(self, bar: Any, paused: bool) -> None:
+        if bar is None:
+            return
+        setter = getattr(bar, "setPaused", None)
+        if callable(setter):
+            setter(bool(paused))
+            return
+        if bool(paused):
+            pauser = getattr(bar, "pause", None)
+            if callable(pauser):
+                pauser()
+            return
+        resumer = getattr(bar, "resume", None)
+        if callable(resumer):
+            resumer()
+
+    def _apply_progress_visual_state(self, paused: bool) -> None:
+        self._progress_paused_visual = bool(paused)
+        self._set_progress_bar_paused(getattr(self, "progress_bar", None), paused)
+        self._set_progress_bar_paused(getattr(self, "progress_indeterminate_bar", None), paused)
+        for row in self._thread_progress_rows.values():
+            self._set_progress_bar_paused(row.get("step_bar"), paused)
+            self._set_progress_bar_paused(row.get("step_busy_bar"), paused)
+            self._set_progress_bar_paused(row.get("cum_bar"), paused)
+
+    def _status_requires_attention_visual(self, status_text: str) -> bool:
+        text = str(status_text or "").strip()
+        if not text:
+            return False
+        return "已暂停" in text or "触发智能验证" in text
 
     def _controller_initializing(self) -> bool:
         checker = getattr(self.controller, "is_initializing", None)
@@ -233,6 +266,7 @@ class DashboardProgressMixin:
         ):
             status_text = f"{status_text} | 设备限制拦截 {quota_fail_count} 次"
         self.status_label.setText(status_text)
+        self._apply_progress_visual_state(self._status_requires_attention_visual(status_text))
         progress = 0
         if target > 0:
             progress = min(100, int((current / max(target, 1)) * 100))
@@ -334,7 +368,7 @@ class DashboardProgressMixin:
         row_layout.addLayout(cumulative_layout)
 
         self.thread_progress_rows_layout.addWidget(row_widget)
-        return {
+        row = {
             "widget": row_widget,
             "name": name_label,
             "status": status_label,
@@ -345,6 +379,10 @@ class DashboardProgressMixin:
             "cum_bar": cumulative_bar,
             "cum_value": cumulative_value,
         }
+        self._set_progress_bar_paused(step_bar, self._progress_paused_visual)
+        self._set_progress_bar_paused(step_busy_bar, self._progress_paused_visual)
+        self._set_progress_bar_paused(cumulative_bar, self._progress_paused_visual)
+        return row
 
     def update_thread_progress(self, payload: dict):
         if not isinstance(payload, dict):
@@ -442,10 +480,14 @@ class DashboardProgressMixin:
             self.resume_btn.setEnabled(False)
             self.resume_btn.hide()
             self._set_main_progress_indeterminate(False)
+            self._apply_progress_visual_state(
+                self._status_requires_attention_visual(self.status_label.text())
+            )
         if running:
             self._thread_clear_timer.stop()
             self._clear_thread_progress_rows()
             self._last_device_quota_fail_count = 0
+            self._apply_progress_visual_state(False)
             if self._controller_initializing():
                 self.thread_progress_hint.setText("正在初始化...")
                 self.status_label.setText("正在初始化")
@@ -491,11 +533,15 @@ class DashboardProgressMixin:
             self.resume_btn.hide()
             return
         if paused:
+            self._apply_progress_visual_state(True)
             self.resume_btn.show()
             self.resume_btn.setEnabled(True)
             msg = f"已暂停：{reason}" if reason else "已暂停"
             self._toast(msg, "warning", 2200)
         else:
+            self._apply_progress_visual_state(
+                self._status_requires_attention_visual(self.status_label.text())
+            )
             self.resume_btn.setEnabled(False)
             self.resume_btn.hide()
 

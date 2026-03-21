@@ -515,15 +515,30 @@ class ContactForm(StatusPollingMixin, QWidget):
             self.random_ip_user_id_label.show()
         else:
             self.random_ip_user_id_label.hide()
+        self._sync_donation_check_state()
         self._update_send_button_state()
 
     def _get_donation_check_block_reason(self) -> str:
         current_type = self.type_combo.currentText() or ""
         if current_type != REQUEST_MESSAGE_TYPE:
             return ""
+        amount_text = (self.amount_edit.currentText() or "").strip()
+        if not amount_text:
+            return "请先填写支持金额后，再勾选“我已完成捐助，且确认随机ip可用”。"
         if self._random_ip_user_id > 0:
             return ""
         return "你还没有成功使用过随机IP，暂时不能勾选。请先启用并实际跑通一次随机IP，确认能正常用，再来申请。"
+
+    def _sync_donation_check_state(self) -> None:
+        """当勾选条件失效时，自动撤销“已捐助”勾选。"""
+        if not hasattr(self, "donated_cb"):
+            return
+        if self._get_donation_check_block_reason() and self.donated_cb.isChecked():
+            previous_block_state = self.donated_cb.blockSignals(True)
+            try:
+                self.donated_cb.setChecked(False)
+            finally:
+                self.donated_cb.blockSignals(previous_block_state)
 
     def _open_donate_page(self) -> None:
         widget: Optional[QWidget] = self
@@ -689,6 +704,7 @@ class ContactForm(StatusPollingMixin, QWidget):
             self._close_amount_rule_infobar()
         self._refresh_amount_options()
         self._sync_amount_rule_warning()
+        self._sync_donation_check_state()
         self._update_send_button_state()
 
     def _sync_message_type_lock_state(self) -> None:
@@ -709,7 +725,7 @@ class ContactForm(StatusPollingMixin, QWidget):
         current_type = self.type_combo.currentText() or ""
         require_donation_check = current_type == REQUEST_MESSAGE_TYPE
         block_reason = self._get_donation_check_block_reason()
-        can_send = (not require_donation_check) or self.donated_cb.isChecked()
+        can_send = (not require_donation_check) or (self.donated_cb.isChecked() and not block_reason)
         self.send_btn.setEnabled(can_send)
         if require_donation_check and block_reason:
             self.donated_cb.setToolTip(block_reason)
@@ -832,6 +848,8 @@ class ContactForm(StatusPollingMixin, QWidget):
         """金额输入变化时同步金额规则提示。"""
         _ = text
         self._sync_amount_rule_warning()
+        self._sync_donation_check_state()
+        self._update_send_button_state()
 
     def _normalize_amount_if_needed(self) -> None:
         """将 0 自动纠正为 0.01，避免提交无效金额。"""
