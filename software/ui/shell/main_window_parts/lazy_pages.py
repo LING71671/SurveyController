@@ -34,14 +34,14 @@ class MainWindowLazyPagesMixin:
         close: Any  # 继承自 QWidget
 
     def _init_navigation(self):
-        self.addSubInterface(self.dashboard, FluentIcon.HOME, "概览", NavigationItemPosition.TOP)
-        self.addSubInterface(self.runtime_page, FluentIcon.DEVELOPER_TOOLS, "运行参数", NavigationItemPosition.TOP)
-        self.addSubInterface(self.answer_rules_page, FluentIcon.DICTIONARY_ADD, "作答规则", NavigationItemPosition.TOP)
-        self.addSubInterface(self._get_log_page(), FluentIcon.INFO, "日志", NavigationItemPosition.TOP)
+        self.addSubInterface(self.dashboard, FluentIcon.HOME, "概览", position=NavigationItemPosition.TOP)
+        self.addSubInterface(self.runtime_page, FluentIcon.DEVELOPER_TOOLS, "运行参数", position=NavigationItemPosition.TOP)
+        self.addSubInterface(self.answer_rules_page, FluentIcon.DICTIONARY_ADD, "作答规则", position=NavigationItemPosition.TOP)
+        self.addSubInterface(self._get_log_page(), FluentIcon.INFO, "日志", position=NavigationItemPosition.TOP)
         # 社区页面
-        self.addSubInterface(self._get_community_page(), FluentIcon.CHAT, "社区", NavigationItemPosition.BOTTOM)
+        self.addSubInterface(self._get_community_page(), FluentIcon.CHAT, "社区", position=NavigationItemPosition.BOTTOM)
         # 设置页面
-        self.addSubInterface(self._get_settings_page(), FluentIcon.SETTING, "设置", NavigationItemPosition.BOTTOM)
+        self.addSubInterface(self._get_settings_page(), FluentIcon.SETTING, "设置", position=NavigationItemPosition.BOTTOM)
         # "更多"弹出式子菜单
         self.navigationInterface.addItem(
             routeKey="about_menu",
@@ -140,8 +140,9 @@ class MainWindowLazyPagesMixin:
         return self._donate_page
 
     def _init_changelog_navigation(self):
-        """初始化更新日志导航（切换逻辑已整合到 ChangelogPage 内部）"""
-        self._get_changelog_page()  # 预先初始化，使信号连接就绪
+        """初始化更新日志导航。"""
+        # 不在启动阶段预建页面，避免主窗口刚起来就额外拉起网络线程。
+        return
 
     def _show_about_menu(self):
         """显示关于子菜单"""

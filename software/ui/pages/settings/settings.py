@@ -21,7 +21,14 @@ from qfluentwidgets import (
 )
 
 from software.ui.widgets.setting_cards import SwitchSettingCard
-from software.app.config import DOWNLOAD_SOURCES, DEFAULT_DOWNLOAD_SOURCE, app_settings, get_bool_from_qsettings
+from software.app.config import (
+    DEFAULT_DOWNLOAD_SOURCE,
+    DOWNLOAD_SOURCES,
+    LEGACY_SIDEBAR_EXPAND_SETTING_KEY,
+    NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+    app_settings,
+    get_bool_from_qsettings,
+)
 
 
 class SettingsPage(ScrollArea):
@@ -48,15 +55,15 @@ class SettingsPage(ScrollArea):
         # 界面外观组
         self.appearance_group = SettingCardGroup("界面外观", self.view)
 
-        # 侧边栏展开设置卡片
-        self.sidebar_card = SwitchSettingCard(
+        # 微软商店风格导航标签显示设置卡片
+        self.navigation_text_card = SwitchSettingCard(
             FluentIcon.MENU,
-            "始终展开侧边栏",
-            "开启后侧边栏将始终保持展开状态",
+            "显示选中导航名称",
+            "开启后左侧导航会像微软商店一样显示当前选中项的文字标签",
             self.appearance_group
         )
-        self.sidebar_card.setChecked(get_bool_from_qsettings(settings.value("sidebar_always_expand"), True))
-        self.appearance_group.addSettingCard(self.sidebar_card)
+        self.navigation_text_card.setChecked(self._read_navigation_text_visible_setting())
+        self.appearance_group.addSettingCard(self.navigation_text_card)
 
         # 窗口置顶设置卡片
         self.topmost_card = SwitchSettingCard(
@@ -150,11 +157,11 @@ class SettingsPage(ScrollArea):
 
         # 绑定事件
         bind_logged_action(
-            self.sidebar_card.switchButton.checkedChanged,
-            self._on_sidebar_toggled,
+            self.navigation_text_card.switchButton.checkedChanged,
+            self._on_navigation_text_toggled,
             scope="CONFIG",
-            event="toggle_sidebar_always_expand",
-            target="sidebar_switch",
+            event="toggle_navigation_text_visible",
+            target="navigation_text_switch",
             page="settings",
             payload_factory=lambda checked: {"enabled": bool(checked)},
         )
@@ -222,14 +229,28 @@ class SettingsPage(ScrollArea):
         card.setChecked(checked)
         btn.blockSignals(False)
 
-    def _apply_sidebar_state(self, checked: bool, persist: bool = True):
+    def _read_navigation_text_visible_setting(self) -> bool:
+        settings = app_settings()
+        value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
+        if value is not None:
+            return get_bool_from_qsettings(value, True)
+
+        legacy_value = settings.value(LEGACY_SIDEBAR_EXPAND_SETTING_KEY)
+        visible = get_bool_from_qsettings(legacy_value, True)
+        if legacy_value is not None:
+            settings.setValue(NAVIGATION_TEXT_VISIBLE_SETTING_KEY, visible)
+            settings.remove(LEGACY_SIDEBAR_EXPAND_SETTING_KEY)
+        return visible
+
+    def _apply_navigation_text_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
         if persist:
-            settings.setValue("sidebar_always_expand", checked)
+            settings.setValue(NAVIGATION_TEXT_VISIBLE_SETTING_KEY, checked)
+            settings.remove(LEGACY_SIDEBAR_EXPAND_SETTING_KEY)
         log_action(
             "CONFIG",
-            "toggle_sidebar_always_expand",
-            "sidebar_switch",
+            "toggle_navigation_text_visible",
+            "navigation_text_switch",
             "settings",
             result="changed",
             payload={"enabled": bool(checked), "persist": persist},
@@ -238,15 +259,10 @@ class SettingsPage(ScrollArea):
         nav = getattr(win, "navigationInterface", None)
         if nav is not None:
             try:
-                if checked:
-                    nav.setCollapsible(False)
-                    nav.expand()
-                else:
-                    nav.setCollapsible(True)
-                    if hasattr(nav, "panel"):
-                        nav.panel.collapse()
+                if hasattr(nav, "setSelectedTextVisible"):
+                    nav.setSelectedTextVisible(bool(checked))
             except Exception as exc:
-                log_suppressed_exception("_apply_sidebar_state: if checked: nav.setCollapsible(False) nav.expand() else: nav.setCollapsible(T...", exc, level=logging.WARNING)
+                log_suppressed_exception("_apply_navigation_text_state: nav.setSelectedTextVisible(bool(checked))", exc, level=logging.WARNING)
 
     def _apply_topmost_state(self, checked: bool, persist: bool = True):
         settings = app_settings()
@@ -291,9 +307,9 @@ class SettingsPage(ScrollArea):
             payload={"enabled": bool(checked), "persist": persist},
         )
 
-    def _on_sidebar_toggled(self, checked: bool):
-        """侧边栏展开切换"""
-        self._apply_sidebar_state(checked)
+    def _on_navigation_text_toggled(self, checked: bool):
+        """导航标签显示切换"""
+        self._apply_navigation_text_state(checked)
 
     def _restart_program(self):
         """重启程序"""
@@ -361,20 +377,26 @@ class SettingsPage(ScrollArea):
         log_action("CONFIG", "reset_ui_settings", "reset_ui_card", "settings", result="confirmed")
 
         settings = app_settings()
-        for key in ("sidebar_always_expand", "window_topmost", "ask_save_on_close", "auto_check_update"):
+        for key in (
+            NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+            LEGACY_SIDEBAR_EXPAND_SETTING_KEY,
+            "window_topmost",
+            "ask_save_on_close",
+            "auto_check_update",
+        ):
             settings.remove(key)
 
         defaults = {
-            "sidebar_always_expand": True,
+            NAVIGATION_TEXT_VISIBLE_SETTING_KEY: True,
             "window_topmost": False,
             "ask_save_on_close": True,
             "auto_check_update": True,
         }
-        self._set_switch_state(self.sidebar_card, defaults["sidebar_always_expand"])
+        self._set_switch_state(self.navigation_text_card, defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY])
         self._set_switch_state(self.topmost_card, defaults["window_topmost"])
         self._set_switch_state(self.ask_save_card, defaults["ask_save_on_close"])
         self._set_switch_state(self.auto_update_card, defaults["auto_check_update"])
-        self._apply_sidebar_state(defaults["sidebar_always_expand"], persist=False)
+        self._apply_navigation_text_state(defaults[NAVIGATION_TEXT_VISIBLE_SETTING_KEY], persist=False)
         self._apply_topmost_state(defaults["window_topmost"], persist=False)
         InfoBar.success(
             "",

@@ -11,6 +11,7 @@ from software.network.http.client import (
     delete,
     get,
     post,
+    prewarm,
     put,
     request,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "ConnectionError",
     "HTTPError",
     "close",
+    "prewarm",
     "request",
     "get",
     "post",

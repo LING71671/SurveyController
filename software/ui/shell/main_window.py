@@ -12,10 +12,10 @@ from PySide6.QtGui import QIcon, QGuiApplication, QColor
 from PySide6.QtWidgets import QDialog
 from qfluentwidgets import (
     DotInfoBadge,
-    FluentWindow,
     InfoBadgePosition,
     InfoBar,
     InfoBarPosition,
+    MSFluentWindow,
     MessageBox,
     Theme,
     qconfig,
@@ -35,7 +35,14 @@ from software.ui.shell.main_window_parts.dialogs import MainWindowDialogsMixin
 from software.ui.shell.main_window_parts.lifecycle import MainWindowLifecycleMixin
 from software.ui.shell.main_window_parts.lazy_pages import MainWindowLazyPagesMixin
 from software.ui.shell.main_window_parts.update import MainWindowUpdateMixin
-from software.app.config import APP_ICON_RELATIVE_PATH, STATUS_ENDPOINT, app_settings, get_bool_from_qsettings
+from software.app.config import (
+    APP_ICON_RELATIVE_PATH,
+    LEGACY_SIDEBAR_EXPAND_SETTING_KEY,
+    NAVIGATION_TEXT_VISIBLE_SETTING_KEY,
+    STATUS_ENDPOINT,
+    app_settings,
+    get_bool_from_qsettings,
+)
 from software.logging.action_logger import log_action
 from software.logging.log_utils import register_popup_handler
 from software.app.version import __VERSION__
@@ -52,9 +59,9 @@ class MainWindow(
     MainWindowLifecycleMixin,
     MainWindowLazyPagesMixin,
     MainWindowUpdateMixin,
-    FluentWindow,
+    MSFluentWindow,
 ):
-    """主窗口，PowerToys 风格导航 + 圆角布局，支持主题动态切换。"""
+    """主窗口，采用微软商店风格导航，支持主题动态切换。"""
 
     # 下载开始信号（显示转圈动画）
     downloadStarted = Signal()
@@ -136,10 +143,8 @@ class MainWindow(
         self._init_changelog_navigation()
         self._init_community_hint_badge_state()
         self.stackedWidget.currentChanged.connect(self._on_stack_widget_changed)
-        # 设置侧边栏宽度和折叠策略（延迟到事件循环中，避免时序问题）
-        self.navigationInterface.setExpandWidth(180)
-        QTimer.singleShot(0, self._setup_sidebar_state)
-        self._sidebar_expanded = False  # 标记侧边栏是否已展开
+        # 微软商店风格导航栏需要在事件循环后应用显示偏好，避免初始化时序抖动
+        QTimer.singleShot(0, self._configure_navigation_interface)
         self._bind_controller_signals()
         self.controller.configure_ui_bridge(
             quota_request_form_opener=self._open_quota_request_form,
@@ -196,9 +201,34 @@ class MainWindow(
         except Exception:
             logging.info("启用窗口材质效果失败", exc_info=True)
 
+    def _read_navigation_text_visible_setting(self) -> bool:
+        """读取导航标签可见性设置，并在启动时迁移旧版侧边栏展开配置。"""
+        settings = app_settings()
+        stored_value = settings.value(NAVIGATION_TEXT_VISIBLE_SETTING_KEY)
+        if stored_value is not None:
+            return get_bool_from_qsettings(stored_value, True)
+
+        legacy_value = settings.value(LEGACY_SIDEBAR_EXPAND_SETTING_KEY)
+        visible = get_bool_from_qsettings(legacy_value, True)
+        if legacy_value is not None:
+            settings.setValue(NAVIGATION_TEXT_VISIBLE_SETTING_KEY, visible)
+            settings.remove(LEGACY_SIDEBAR_EXPAND_SETTING_KEY)
+        return visible
+
+    def _configure_navigation_interface(self):
+        """应用微软商店风格导航栏偏好。"""
+        nav = getattr(self, "navigationInterface", None)
+        if nav is None:
+            return
+        try:
+            if hasattr(nav, "setSelectedTextVisible"):
+                nav.setSelectedTextVisible(self._read_navigation_text_visible_setting())
+        except Exception:
+            logging.info("应用导航栏显示偏好失败", exc_info=True)
+
     def _apply_default_window_size(self):
         """按屏幕可用区域设置默认窗口尺寸，避免高缩放场景越界。"""
-        fallback_width, fallback_height = 1180, 780
+        fallback_width, fallback_height = 1100, 780
         try:
             screen = self.screen() or QGuiApplication.primaryScreen()
             if not screen:
@@ -206,10 +236,10 @@ class MainWindow(
                 return
 
             available = screen.availableGeometry()
-            target_width = int(available.width() * 0.88)
+            target_width = int(available.width() * 0.78)
             target_height = int(available.height() * 0.88)
 
-            target_width = max(900, min(target_width, 1280))
+            target_width = max(900, min(target_width, 1120))
             target_height = max(640, min(target_height, 860))
 
             self.resize(
@@ -271,32 +301,6 @@ class MainWindow(
         super().resizeEvent(e)
         if self._boot_splash:
             self._boot_splash.update_layout(self.width(), self.height())
-
-    def _setup_sidebar_state(self):
-        """设置侧边栏折叠状态（在事件循环中调用以避免时序问题）"""
-        try:
-            settings = app_settings()
-            always_expand = get_bool_from_qsettings(settings.value("sidebar_always_expand"), True)
-            self.navigationInterface.setCollapsible(not always_expand)
-            if always_expand:
-                self.navigationInterface.expand(useAni=False)
-        except Exception:
-            logging.info("设置侧边栏状态失败", exc_info=True)
-
-    def showEvent(self, e):
-        """窗口显示时展开侧边栏"""
-        super().showEvent(e)
-        if self._sidebar_expanded:
-            return
-        self._sidebar_expanded = True
-        settings = app_settings()
-        always_expand = get_bool_from_qsettings(settings.value("sidebar_always_expand"), True)
-        if not always_expand:
-            return
-        try:
-            self.navigationInterface.expand(useAni=False)
-        except Exception:
-            logging.info("showEvent 展开侧边栏失败", exc_info=True)
 
     def closeEvent(self, e):
         """窗口关闭时询问用户是否保存配置"""

@@ -212,7 +212,6 @@ class RandomIPSettingCard(ExpandGroupSettingCard):
         self._benefit_prefetch_worker: Optional[_BenefitAreaPrefetchWorker] = None
         self._pending_benefit_area_code: Optional[str] = None
         self._load_area_options(_PROXY_SOURCE_DEFAULT)
-        self._start_benefit_area_prefetch()
         self.areaRow.setVisible(True)
         self.provinceCombo.currentIndexChanged.connect(self._on_province_changed)
         self.cityCombo.currentIndexChanged.connect(self._on_city_changed)

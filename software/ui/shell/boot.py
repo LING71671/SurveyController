@@ -7,8 +7,8 @@ __all__ = ["BootSplash", "create_boot_splash", "get_boot_splash", "finish_boot_s
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer, QSize
-from PySide6.QtWidgets import QLabel
-from qfluentwidgets import IndeterminateProgressBar, SplashScreen, isDarkTheme, FluentWindow
+from PySide6.QtWidgets import QLabel, QWidget
+from qfluentwidgets import IndeterminateProgressBar, SplashScreen, isDarkTheme
 
 from software.app.version import __VERSION__
 
@@ -16,7 +16,7 @@ from software.app.version import __VERSION__
 class BootSplash:
     """启动画面管理类"""
 
-    def __init__(self, window: "FluentWindow"):
+    def __init__(self, window: QWidget):
         self.window = window
         self.splash_screen = SplashScreen(window.windowIcon(), window)
         self.splash_screen.setIconSize(QSize(128, 128))
@@ -138,7 +138,7 @@ class BootSplash:
 _boot_splash: Optional[BootSplash] = None
 
 
-def create_boot_splash(window: "FluentWindow") -> BootSplash:
+def create_boot_splash(window: QWidget) -> BootSplash:
     """创建启动画面"""
     global _boot_splash
     _boot_splash = BootSplash(window)

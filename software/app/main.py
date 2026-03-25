@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication
 from software.app.config import LOG_DIR_NAME
 from software.app.runtime_paths import get_runtime_directory
 from software.logging.log_utils import setup_logging
+import software.network.http as http_client
 from software.ui.helpers.qfluent_compat import install_qfluentwidgets_animation_guards
 
 
@@ -77,6 +78,9 @@ def main():
     # 设置默认字体
     font = QFont("Microsoft YaHei UI", 9)
     app.setFont(font)
+
+    # 在主线程预热 httpx/httpcore/ssl，避免首次后台请求触发原生层崩溃
+    http_client.prewarm()
 
     # 导入并创建主窗口（主窗口内部会显示 SplashScreen）
     from software.ui.shell.main_window import create_window

@@ -17,6 +17,8 @@ from software.logging.log_utils import log_suppressed_exception
 _CLIENT_LIMITS = httpx.Limits(max_connections=20, max_keepalive_connections=10)
 _MAX_CLIENTS = 20
 _CLIENT_TTL = 300
+_PREWARM_LOCK = threading.Lock()
+_PREWARMED = False
 
 
 RequestException = httpx.HTTPError
@@ -328,6 +330,31 @@ def _normalize_timeout(timeout: Any) -> Any:
 
 
 _client_manager = _SyncClientManager()
+
+
+def prewarm() -> None:
+    """在主线程预热 httpx/httpcore/ssl 导入链，规避首次后台初始化的原生崩溃。"""
+    global _PREWARMED
+
+    if _PREWARMED:
+        return
+
+    with _PREWARM_LOCK:
+        if _PREWARMED:
+            return
+        temp_client: httpx.Client | None = None
+        try:
+            # 这里只做传输层与 SSL 上下文初始化，不发送真实请求。
+            temp_client = httpx.Client(timeout=None, limits=_CLIENT_LIMITS)
+            _PREWARMED = True
+        except Exception as exc:
+            log_suppressed_exception("http_client.prewarm httpx.Client()", exc, level=logging.WARNING)
+        finally:
+            if temp_client is not None:
+                try:
+                    temp_client.close()
+                except Exception as exc:
+                    log_suppressed_exception("http_client.prewarm temp_client.close()", exc, level=logging.WARNING)
 
 
 def close() -> None:
