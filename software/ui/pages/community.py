@@ -1,6 +1,5 @@
 """社区页面 - QQ群、开源声明、开发者招募"""
 import os
-import logging
 import webbrowser
 
 from PySide6.QtCore import Qt
@@ -11,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QBoxLayout,
     QLabel,
-    QDialog,
     QSizePolicy,
 )
 from qfluentwidgets import (
@@ -28,7 +26,6 @@ from qfluentwidgets import (
 
 from software.app.version import GITHUB_OWNER, GITHUB_REPO
 from software.app.runtime_paths import get_assets_directory
-from software.logging.log_utils import log_suppressed_exception
 
 _GITHUB_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
 
@@ -126,10 +123,6 @@ class CommunityPage(ScrollArea):
         desc.setWordWrap(True)
         left.addWidget(desc)
 
-        hint = CaptionLabel("点击二维码可查看大图", card)
-        hint.setStyleSheet("font-size: 14px; color: #888; letter-spacing: 1px;")
-        left.addWidget(hint)
-
         self.qq_inner.addLayout(left, 1)
 
         # 右侧二维码
@@ -141,8 +134,6 @@ class CommunityPage(ScrollArea):
             "border-radius: 12px; "
             "padding: 12px;"
         )
-        self.qq_qr_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.qq_qr_label.mousePressEvent = lambda _: self._on_qr_clicked()
         self._load_qr_image()
 
         self.qq_inner.addWidget(self.qq_qr_label, 0, Qt.AlignmentFlag.AlignVCenter)
@@ -334,44 +325,6 @@ class CommunityPage(ScrollArea):
         painter.drawPixmap(0, 0, pixmap)
         painter.end()
         return output
-
-    def _on_qr_clicked(self):
-        """点击二维码查看原图"""
-        try:
-            path = os.path.join(get_assets_directory(), "community_qr.jpg")
-            if os.path.exists(path):
-                self._show_full_image(path)
-        except Exception as exc:
-            log_suppressed_exception("_on_qr_clicked", exc, level=logging.WARNING)
-
-    def _show_full_image(self, image_path: str):
-        """显示原图弹窗"""
-        dialog = QDialog(self.window() or self)
-        dialog.setWindowTitle("QQ群二维码")
-        dialog.setModal(True)
-
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(16, 16, 16, 16)
-
-        img_label = QLabel(dialog)
-        img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pixmap = QPixmap(image_path)
-        if pixmap.width() > 600 or pixmap.height() > 600:
-            pixmap = pixmap.scaled(
-                600,
-                600,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        img_label.setPixmap(pixmap)
-        layout.addWidget(img_label)
-
-        close_btn = PushButton("关闭", dialog)
-        close_btn.clicked.connect(dialog.accept)
-        layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        dialog.adjustSize()
-        dialog.exec()
 
     # ── 响应式布局 ──
 

@@ -15,6 +15,7 @@ from qfluentwidgets import (
     SegmentedWidget,
     SwitchButton,
     IndicatorPosition,
+    isDarkTheme,
 )
 
 from software.core.questions.utils import parse_random_int_token, try_parse_random_int_range
@@ -39,6 +40,15 @@ _TEXT_RANDOM_INTEGER = "integer"
 _TEXT_RANDOM_NAME_TOKEN = "__RANDOM_NAME__"
 _TEXT_RANDOM_MOBILE_TOKEN = "__RANDOM_MOBILE__"
 _TEXT_RANDOM_ID_CARD_TOKEN = "__RANDOM_ID_CARD__"
+
+
+def _apply_ai_label_state_style(label: BodyLabel) -> None:
+    """为 AI 标签补上明确的禁用态颜色，避免默认主题下发灰不明显。"""
+    active_color = "#f5f5f5" if isDarkTheme() else "#202020"
+    disabled_color = "#7f7f7f" if isDarkTheme() else "#9a9a9a"
+    label.setStyleSheet(
+        f"QLabel {{ color: {active_color}; }} QLabel:disabled {{ color: {disabled_color}; }}"
+    )
 
 
 def _get_segmented_route_key(seg: Any) -> str:
@@ -79,6 +89,7 @@ class WizardSectionsMixin:
     text_random_int_min_edit_map: Dict[int, Any]
     text_random_int_max_edit_map: Dict[int, Any]
     ai_check_map: Dict[int, Any]
+    ai_label_map: Dict[int, Any]
     text_random_mode_map: Dict[int, str]
     text_edit_map: Dict[int, Any]
     info: List[Any]
@@ -324,9 +335,10 @@ class WizardSectionsMixin:
             )
 
             ai_cb = SwitchButton(card, IndicatorPosition.RIGHT)
-            ai_cb.setOnText("开")
-            ai_cb.setOffText("关")
+            ai_cb.setOnText("")
+            ai_cb.setOffText("")
             ai_label = BodyLabel("启用 AI", card)
+            _apply_ai_label_state_style(ai_label)
             ai_cb.setToolTip("运行时每次填空都会调用 AI")
             ai_label.setToolTip("运行时每次填空都会调用 AI")
             install_tooltip_filters((random_name_cb, random_mobile_cb, random_id_card_cb, random_integer_cb, ai_cb, ai_label))
@@ -335,6 +347,7 @@ class WizardSectionsMixin:
             btn_row.addWidget(ai_cb)
             btn_row.addWidget(ai_label)
             self.ai_check_map[idx] = ai_cb
+            self.ai_label_map[idx] = ai_label
 
             random_mode = self._resolve_text_random_mode(entry)
             self.text_random_mode_map[idx] = random_mode
@@ -547,9 +560,10 @@ class WizardSectionsMixin:
 
             # 每个填空项的AI复选框
             ai_cb = SwitchButton(card, IndicatorPosition.RIGHT)
-            ai_cb.setOnText("开")
-            ai_cb.setOffText("关")
+            ai_cb.setOnText("")
+            ai_cb.setOffText("")
             ai_label = BodyLabel("启用 AI", card)
+            _apply_ai_label_state_style(ai_label)
             ai_cb.setToolTip("运行时每次填空都会调用 AI")
             ai_label.setToolTip("运行时每次填空都会调用 AI")
             install_tooltip_filters((ai_cb, ai_label))
@@ -1090,6 +1104,7 @@ class WizardSectionsMixin:
     def _sync_text_section_state(self, idx: int) -> None:
         random_mode = self.text_random_mode_map.get(idx, _TEXT_RANDOM_NONE)
         ai_cb = self.ai_check_map.get(idx)
+        ai_label = self.ai_label_map.get(idx)
         random_name_cb = self.text_random_name_check_map.get(idx)
         random_mobile_cb = self.text_random_mobile_check_map.get(idx)
         random_id_card_cb = self.text_random_id_card_check_map.get(idx)
@@ -1119,11 +1134,17 @@ class WizardSectionsMixin:
                 ai_cb.setChecked(False)
                 ai_cb.blockSignals(False)
                 ai_cb.setEnabled(False)
+            if ai_label:
+                ai_label.setToolTip("随机姓名、随机手机号、随机身份证、随机整数与 AI 填空不能同时启用")
+                ai_label.setEnabled(False)
             self._set_text_answer_enabled(idx, False)
             return
         if ai_cb:
             ai_cb.setToolTip("运行时每次填空都会调用 AI")
             ai_cb.setEnabled(True)
+            if ai_label:
+                ai_label.setToolTip("运行时每次填空都会调用 AI")
+                ai_label.setEnabled(True)
             if ai_cb.isChecked():
                 _set_random_controls_enabled(False, "启用 AI 时，随机姓名、随机手机号、随机身份证和随机整数不可用")
                 _set_integer_range_enabled(False)
@@ -1132,6 +1153,9 @@ class WizardSectionsMixin:
                 _set_integer_range_enabled(False)
             self._set_text_answer_enabled(idx, not ai_cb.isChecked())
             return
+        if ai_label:
+            ai_label.setToolTip("运行时每次填空都会调用 AI")
+            ai_label.setEnabled(True)
         _set_random_controls_enabled(True)
         _set_integer_range_enabled(False)
         self._set_text_answer_enabled(idx, True)

@@ -566,7 +566,7 @@ class DashboardPage(
         )
 
     def _on_survey_parsed(self, info: list, title: str):
-        """问卷解析成功的处理（仅负责关闭进度条和提示，向导弹出由 MainWindow 处理）"""
+        """问卷解析成功的处理（仅负责关闭进度条和记录结果，向导弹出由 MainWindow 处理）"""
         # 关闭进度消息条
         if self._progress_infobar:
             try:
@@ -575,7 +575,6 @@ class DashboardPage(
                 log_suppressed_exception("_on_survey_parsed: self._progress_infobar.close()", exc, level=logging.WARNING)
             self._progress_infobar = None
 
-        # 显示解析成功消息
         count = len(info) if info else 0
         unsupported_count = sum(1 for item in (info or []) if isinstance(item, dict) and item.get("unsupported"))
         if unsupported_count > 0:
@@ -588,13 +587,7 @@ class DashboardPage(
                 level=logging.WARNING,
                 payload={"question_count": count, "unsupported_count": unsupported_count},
             )
-            self._toast(
-                f"解析成功，已识别 {count} 个题目；其中 {unsupported_count} 题暂不支持，启动时会阻止执行",
-                "warning",
-                duration=4200,
-            )
             return
-        self._toast(f"解析成功，已识别 {count} 个题目", "success", duration=2500)
 
         log_action(
             "UI",

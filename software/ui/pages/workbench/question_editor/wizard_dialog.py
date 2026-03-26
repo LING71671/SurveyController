@@ -492,6 +492,7 @@ class QuestionWizardDialog(WizardSectionsMixin, QDialog):
         self.matrix_row_slider_map: Dict[int, List[List[NoWheelSlider]]] = {}
         self.text_edit_map: Dict[int, QuestionWizardDialog.TextEditsValue] = {}
         self.ai_check_map: Dict[int, SwitchButton] = {}
+        self.ai_label_map: Dict[int, BodyLabel] = {}
         self.text_container_map: Dict[int, QWidget] = {}
         self.text_add_btn_map: Dict[int, PushButton] = {}
         self.text_random_mode_map: Dict[int, str] = {}
