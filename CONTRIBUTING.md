@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢愿意改进本项目！在开始之前，请先阅读 [行为准则](https://github.com/hungryM0/fuck-wjx/blob/main/CODE_OF_CONDUCT.md)，确保所作的改进能够遵守行为准则。
+感谢愿意改进本项目！在开始之前，请先阅读 [行为准则](https://github.com/hungryM0/SurveyController/blob/main/CODE_OF_CONDUCT.md)，确保所作的改进能够遵守行为准则。
 
 ## 交流渠道
 - **Bug/功能建议**：首选 GitHub Issues。
@@ -10,9 +10,9 @@
 - 操作系统：仅考虑对 Windows 10/11 的支持
 - Python：3.8+
 - 安装依赖：`pip install -r requirements.txt`。
-- 从源码运行：`python fuck-wjx.py`。
-- 导入检测：`python test_wjx_imports.py`（扫描 `wjx/` 下所有 `.py` 文件的 `import` 是否报错）。
-- 死代码检测：`python test_wjx_deadcode.py`（基于 vulture，扫描 `wjx/` 下未引用的死代码）。
+- 从源码运行：`python SurveyController.py`。
+- 导入检测：`python test_imports.py`（扫描 `wjx/`、`software/`、`tencent/` 下所有 `.py` 文件的 `import` 是否报错）。
+- 死代码检测：`python test_deadcode.py`（基于 vulture，扫描 `wjx/`、`software/`、`tencent/` 下未引用的死代码）。
 
 ## 仓库根目录
 
@@ -22,90 +22,91 @@
 │   ├── workflows/
 │   │   └── release-to-r2.yml  # CI/CD 自动发布到 R2
 │   └── ISSUE_TEMPLATE/        # Issue 模板（报错反馈、新功能请求）
-├── fuck-wjx.py
+├── SurveyController.py
 ├── rthook_pyside6.py     # PySide6 打包钩子
-├── test_wjx_imports.py   # 导入检测脚本
-├── test_wjx_deadcode.py  # 死代码检测脚本
-└── wjx/                  # 主代码目录
+├── test_imports.py       # 导入检测脚本
+├── test_deadcode.py      # 死代码检测脚本
+├── software/             # 软件主包（应用壳 + 共享核心 + 平台总调度）
+├── tencent/              # 腾讯问卷主包
+└── wjx/                  # 问卷星主包
 ```
 
-## 主代码目录结构（`wjx/`）
+## 目录结构（`wjx/`、`software/`、`tencent/`）
 
 ```markdown
+software/
+├── app/                   # 启动入口、版本、运行路径、QSettings 门面
+├── assets/                # 程序内置资源（地区数据、协议文本等）
+├── core/                  # 共享执行核心
+│   ├── ai/                # AI 填空共享逻辑
+│   ├── config/            # 配置结构与编解码
+│   ├── engine/            # 共享执行流程（runner/cleanup/公共预处理）；平台专属导航/提交不再放这里
+│   ├── modes/             # 作答模式与时长控制
+│   ├── persona/           # 人设与上下文生成
+│   ├── psychometrics/     # 心理测量题辅助逻辑
+│   ├── questions/         # 题目配置、分布、共享判定与文本共享常量；平台 DOM 执行器不再放这里
+│   └── task/              # TaskContext、事件总线、线程进度模型
+├── integrations/
+│   └── ai/                # AI API 适配器
+├── io/
+│   ├── config/            # 配置读写、导入导出
+│   ├── qr/                # 二维码工具
+│   ├── markdown/          # Markdown 工具
+│   └── reports/           # 使用记录等输出
+├── logging/               # 日志工具
+├── network/
+│   ├── http/              # httpx 客户端封装
+│   ├── browser/           # 浏览器驱动
+│   └── proxy/             # 代理 API / 会话 / 策略 / 地区 / 代理池
+├── providers/             # 平台识别、注册、分发总入口
+├── system/                # Windows/系统级能力（安全存储、注册表）
+├── ui/
+│   ├── shell/             # 主窗口、启动页、页面装配
+│   ├── controller/        # Qt 协调器
+│   ├── helpers/           # UI 侧辅助门面
+│   │   ├── fluent_tooltip.py # Fluent tooltip 安装器
+│   │   └── qfluent_compat.py # QFluentWidgets 动画 / InfoBar 稳定性补丁
+│   ├── pages/
+│   │   ├── workbench/     # dashboard（page.py 负责首页骨架，cards.py 放首页专用卡片，parts/ 放首页交互拆分）/question_editor（含单栏配置向导）/runtime_panel/strategy（题目策略：条件规则 + 维度分组；dimension_panel.py 负责面板装配，dimension_sections.py 负责分组区块与跨表拖拽）/log_panel
+│   │   └── settings/      # 应用程序设置页；settings.py 负责页面骨架，group_widgets.py 放设置页专用右侧控件
+│   └── widgets/           # 通用组件（contact_form 已拆成包；旧 time_range_slider 已移除）
+└── update/                # 更新检查与升级
+
+tencent/
+├── __init__.py            # 包标记文件；真正平台实现请直接看 provider/
+└── provider/              # 腾讯问卷专属实现（解析、运行时、导航、提交）
+
 wjx/
-├── main.py                # GUI 程序入口
-├── boot.py                # 启动流程相关
-├── assets/                # 静态资源（地区行政编码、法律文本等）
-│   └── legal/             # 法律文本（service_terms.txt、privacy_statement.txt）
-├── core/                  # 核心业务逻辑
-│   ├── task_context.py    # 单次任务上下文数据
-│   ├── engine/            # 执行引擎（driver_factory/runtime_control/dom_helpers/navigation/question_detection/submission/answering/runner）
-│   ├── survey/            # 问卷解析（parser.py）
-│   ├── questions/         # 题目配置与题型实现（types/），以及一致性校验与分布纠偏（consistency.py、distribution.py）
-│   │   └── types/         # 各题型实现（single/multiple/dropdown/matrix/scale/score/slider/text/reorder）
-│   ├── captcha/           # 验证码处理（control/handler）
-│   ├── ai/                # AI 运行时（runtime.py）
-│   ├── psychometrics/     # 心理测量学工具（psychometric/utils）
-│   ├── persona/           # 画像与上下文约束（generator/context）
-│   └── services/          # 核心服务层（area_service/proxy_service/survey_service）
-├── ui/                    # 界面层
-│   ├── main_window.py     # 主窗口编排
-│   ├── main_window_parts/ # 主窗口拆分模块（dialogs/lifecycle/lazy_pages/update）
-│   ├── controller/        # 运行控制器入口（run_controller.py）与拆分模块（run_controller_parts/）
-│   ├── dialogs/           # 对话框（contact/terms_of_service）
-│   ├── helpers/           # 界面辅助逻辑（ai_fill/image_attachments）
-│   ├── workers/           # 后台任务（ai_test_worker/update_worker）
-│   ├── widgets/           # 通用 UI 组件（setting_cards/config_drawer/contact_form/full_width_infobar/log_highlighter/no_wheel/ratio_slider/status_polling_mixin/time_range_slider）
-│   └── pages/             # 各页面（workbench/settings/more/community）
-│       ├── community.py   # 社区页（一级菜单）
-│       ├── settings/      # 设置页（settings.py）
-│       ├── more/          # 更多子页面（about/changelog/donate/support/ip_usage）
-│       └── workbench/
-│           ├── dashboard.py
-│           ├── answer_rules.py   # 作答规则页（条件 -> 动作）
-│           ├── log.py
-│           ├── dashboard_parts/  # dashboard 拆分模块（clipboard/entries/progress/random_ip）
-│           ├── question/         # 题目配置界面（page/add_dialog/add_preview/wizard_dialog/wizard_sections/psycho_config/constants/utils）
-│           └── runtime/          # 运行时界面（main/cards/ai/dialogs）
-├── network/               # 网络相关
-│   ├── browser/
-│   │   └── driver.py      # 浏览器驱动封装
-│   ├── proxy/
-│   │   ├── auth.py        # 随机IP鉴权、会话与令牌刷新
-│   │   ├── source.py      # 代理源配置管理（源切换、地区、API覆盖、占用时长）
-│   │   ├── settings.py    # 代理设置共享入口（公开配置读写接口）
-│   │   ├── pool.py        # 代理池和租约管理（租约构建、TTL检查、健康检查）
-│   │   ├── provider.py    # 代理获取主逻辑（批量获取、解析、API测试）
-│   │   ├── quota.py       # 额度管理（以后端会话与默认额度缓存为准）
-│   │   └── gui_bridge.py  # GUI交互桥接（弹窗、线程派发、开关控制）
-│   ├── http_client.py     # 请求策略
-│   └── session_policy.py  # 会话策略
-├── modes/                 # 运行模式控制（timed_mode/duration_control）
-├── utils/                 # 通用工具
-│   ├── event_bus.py       # 全局事件总线
-│   ├── app/               # 应用配置与路径（config/runtime_paths/version）
-│   ├── io/                # 文件读写（load_save/markdown_utils/qrcode_utils/ip_usage_log）
-│   ├── integrations/      # 外部集成（ai_service）
-│   ├── system/            # 系统工具（cleanup_runner/registry_manager/secure_store）
-│   ├── logging/           # 日志工具（log_utils）
-│   └── update/            # 更新逻辑（updater）
-└── __pycache__/           # 运行时缓存文件，不应提交到仓库
+├── __init__.py            # 包标记文件；仅保留版本信息，真实实现在 provider/ 子模块
+└── provider/              # 问卷星专属实现（解析、检测、导航、运行时、提交、questions/ 题型执行器）
 ```
 
 ## PR 流程（推荐）
 1. Fork 仓库本仓库
-2. 开发时遵守现有分层：核心逻辑放 `wjx/core`，界面相关放 `wjx/ui`，网络放 `wjx/network`，通用工具放 `wjx/utils`
-3. 自测：运行 `python test_wjx_imports.py` 检查 import 和语法错误；至少手动跑一次核心流程（启动、加载问卷、配置、开始运行），确保无报错
+2. 开发遵守三主包边界原则：
+   - **共享代码** → `software/`（GUI、配置、执行引擎等）
+   - **问卷星专属** → `wjx/provider/`（平台特定的解析、导航、提交和题型执行）
+   - **腾讯问卷专属** → `tencent/provider/`（平台特定的解析、导航、提交和运行逻辑）
+   - **顶层包** → 仅保留包标记文件，不要把实现代码再塞回 `tencent/`、`wjx/` 目录
+3. 自测：运行 `python test_imports.py` 和 `python test_deadcode.py` 检查 import、语法和死代码错误；至少手动跑一次核心流程（启动APP、加载问卷、配置参数、开始执行），确保无报错
 4. 提交：保持清晰提交信息，必要时补充中文注释和变更说明
 5. PR 描述：写明变更目的、主要改动点、测试方式与结果，关联相关 Issue（如有）
 
 ## 代码与文档风格
-- 维持现有命名与目录结构，不要把无关功能塞进同一文件
-- GUI 优先使用 `QfluentWidgets` 原生组件
-- 文档、提示信息优先使用小白也能看懂的中文
+- **目录结构** - 维持现有模块划分，新功能按职责放到对应目录，不要把无关功能堆进一个文件
+- **UI 组件** - 优先使用 `QfluentWidgets` 原生组件保持统一风格
+- **文档/提示信息** - 使用简洁易懂的中文，避免专业术语堆砌，让小白用户也能理解
 
 ## 行为要求
-- 严禁将本项目用于伪造学术数据、非法刷问卷或任何污染他人数据的行为。
-- 如发现违规，请邮件 `mail@hungrym0.top` 举报。
+- **明确用途** - 仅用于授权测试或学习。严禁伪造学术数据、非法刷问卷、污染他人数据
+- **举报违规** - 发现不当使用请邮件 `mail@hungrym0.top` 举报
 
-欢迎提交 PR 改进问卷解析、题型支持、性能优化、界面体验等内容。谢谢！
+欢迎贡献 PR 改进以下方向：
+- 增加新的问卷题型支持（选择、填空、矩阵等）
+- 增加新的问卷平台支持
+- 性能优化与用户体验改进
+- 文档完善与示例补充
+
+感谢你的贡献！
+
+**结构说明补充**：`software/logging/action_logger.py` 统一了 UI、配置、导航、更新等关键操作的日志封装

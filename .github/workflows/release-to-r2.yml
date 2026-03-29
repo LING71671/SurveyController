@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  R2_LATEST_KEY: "fuck-wjx_latest_setup.exe"
+  R2_LATEST_KEY: "SurveyController_latest_setup.exe"
 
 jobs:
   upload:
@@ -21,7 +21,7 @@ jobs:
           set -euo pipefail
           TAG="${{ github.event.release.tag_name }}"
           ASSET_PATTERN="*_${TAG}_setup.exe"
-          VERSIONED_KEY="fuck-wjx_${TAG}.exe"
+          VERSIONED_KEY="SurveyController_${TAG}.exe"
 
           echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
           echo "asset_pattern=${ASSET_PATTERN}" >> "${GITHUB_OUTPUT}"

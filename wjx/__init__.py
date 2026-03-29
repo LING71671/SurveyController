@@ -1,15 +1,8 @@
-"""WJX 包精简入口。"""
+"""问卷星包标记文件。"""
 
-from wjx.utils.app.version import __VERSION__
+from __future__ import annotations
 
+from software.app.version import __VERSION__
 
-def main():
-    from wjx.main import main as _main
+__all__ = ["__VERSION__"]
 
-    return _main()
-
-
-__all__ = [
-    "main",
-    "__VERSION__",
-]

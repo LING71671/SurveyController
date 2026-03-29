@@ -13,6 +13,8 @@ if getattr(sys, 'frozen', False):
 
     pyside6_dir = os.path.join(app_dir, 'PySide6')
     shiboken6_dir = os.path.join(app_dir, 'shiboken6')
+    qt_dir = os.path.join(pyside6_dir, 'Qt')
+    qt_libexec_dir = os.path.join(qt_dir, 'libexec')
     # numpy 的 delvewheel 补丁在 import numpy 时才运行，时序上可能太晚
     # 在此提前注册，确保 libscipy_openblas64_ 等 DLL 能被 Windows 加载器找到
     numpy_libs_dir = os.path.join(app_dir, 'numpy.libs')
@@ -21,6 +23,8 @@ if getattr(sys, 'frozen', False):
     dirs_to_add = []
     if os.path.isdir(pyside6_dir):
         dirs_to_add.append(pyside6_dir)
+    if os.path.isdir(qt_libexec_dir):
+        dirs_to_add.append(qt_libexec_dir)
     if os.path.isdir(shiboken6_dir):
         dirs_to_add.append(shiboken6_dir)
     if os.path.isdir(numpy_libs_dir):

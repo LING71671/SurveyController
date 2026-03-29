@@ -1,22 +1,22 @@
 <div align="center">
-  <img src="assets/icon.png" alt="fuck-wjx" width="120" height="120" />
-  <h1>fuck-wjx (问卷星速填)</h1>
-  <p>一个支持图形化界面的问卷星自动填写工具，支持自定义答案分布与智能配置。</p>
+  <img src="assets/icon.png" alt="SurveyController" width="120" height="120" />
+  <h1>SurveyController</h1>
+  <p>一个支持问卷星、腾讯问卷自动填写的图形化工具，支持定制数据与指定ip。</p>
 
-  [![GitHub Stars](https://img.shields.io/github/stars/hungryM0/fuck-wjx?style=flat&logo=github&color=yellow)](https://github.com/hungryM0/fuck-wjx/stargazers)
-  [![GitHub Forks](https://img.shields.io/github/forks/hungryM0/fuck-wjx?style=flat&logo=github)](https://github.com/hungryM0/fuck-wjx/network/members)
-  [![GitHub Release](https://img.shields.io/github/v/release/hungryM0/fuck-wjx?style=flat&logo=github&color=blue)](https://github.com/hungryM0/fuck-wjx/releases/latest)
-  [![Downloads](https://img.shields.io/github/downloads/hungryM0/fuck-wjx/total?style=flat&logo=github&color=green)](https://github.com/hungryM0/fuck-wjx/releases)
-  [![License](https://img.shields.io/github/license/hungryM0/fuck-wjx?style=flat&color=orange)](./LICENSE)
+  [![GitHub Stars](https://img.shields.io/github/stars/hungryM0/SurveyController?style=flat&logo=github&color=yellow)](https://github.com/hungryM0/SurveyController/stargazers)
+  [![GitHub Forks](https://img.shields.io/github/forks/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/network/members)
+  [![GitHub Release](https://img.shields.io/github/v/release/hungryM0/SurveyController?style=flat&logo=github&color=blue)](https://github.com/hungryM0/SurveyController/releases/latest)
+  [![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)](https://github.com/hungryM0/SurveyController/releases)
+  [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
   [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-  [![Issues](https://img.shields.io/github/issues/hungryM0/fuck-wjx?style=flat&logo=github)](https://github.com/hungryM0/fuck-wjx/issues)
+  [![Issues](https://img.shields.io/github/issues/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/issues)
 
 </div>
 
 > 参考了 [Zemelee/wjx](https://github.com/Zemelee/wjx)，别忘了给大佬点个star
 
 > [!WARNING]
-> **仅供学习与测试使用。** 请确保拥有目标测试问卷的授权再使用。**严禁污染他人问卷数据！**
+> **该项目仅供 Playwright 的学习与测试使用。** 请确保拥有目标测试问卷的授权再使用,**严禁污染他人问卷数据！**
 
 <img width="689" height="626" alt="gui" src="/assets/gui.png" />
 
@@ -24,31 +24,32 @@
 
 ## 主要特性
 
-1. **图形化界面** - 无需编写代码，通过可视化界面完成所有操作
-2. **二维码识别** - 上传问卷二维码图片，自动解析并提取问卷链接
-3. **自定义答案比例** - 解析问卷题目结构，支持自定义答案权重与概率分布
-4. **可指定地区IP** - 支持IP随机化或指定特定地区IP，且有效规避智能验证
-5. **配置复用** - 支持导出与导入配置文件，便于重复使用
-6. **AI 智能填空（免费）** - 支持主观题自动生成作答内容，由 [@dAwn-Rebirth](https://github.com/dAwn-Rebirth) 贡献
+1. **多平台支持** - 同时支持问卷星和腾讯问卷，一套工具搞定两个平台
+2. **图形化界面** - 无需编写代码，通过可视化UI完成所有操作
+3. **二维码快速解析** - 上传问卷二维码图片自动转链接（支持问卷星平台）
+4. **智能答案配置** - 解析问卷题目结构，支持自定义答案权重与概率分布
+5. **灵活代理设置** - 支持随机IP或指定特定地区IP提交
+6. **配置导入导出** - 保存配置文件便于后续复用，跨设备同步
+7. **AI 智能填空** - 主观题自动生成作答内容（免费），由 [@dAwn-Rebirth](https://github.com/dAwn-Rebirth) 贡献
 
 ---
 
 ## 开始使用
 
 > [!TIP]
-> **安装包：** 前往 [发行版](https://github.com/hungryM0/fuck-wjx/releases/latest) 中下载已打包好的安装包，无需额外配置环境。
+> **安装包：** 前往 [发行版](https://github.com/hungryM0/SurveyController/releases/latest) 中下载已打包好的安装包，无需额外配置环境。
 
 ### 从源码运行
 
 克隆本仓库：
 ```bash
-git clone https://github.com/hungryM0/fuck-wjx.git
+git clone https://github.com/hungryM0/SurveyController.git
 ```
 
 安装依赖并运行：
 ```bash
 pip install -r requirements.txt
-python fuck-wjx.py
+python SurveyController.py
 ```
 
 **环境要求：** Windows 10/11，Python 3.8+
@@ -57,29 +58,29 @@ python fuck-wjx.py
 
 ## 使用方法
 
-1. 输入问卷链接或上传/拖入二维码图片
-2. 点击「自动配置问卷」以解析问卷结构
-3. 根据配置向导调整各题答案的权重分布
-4. 设置目标提交份数与并发浏览器实例数
-5. 按需在「运行参数」中设置随机ip或作答时长设置项
-6. 点击「开始执行」并等待任务完成
+1. **输入问卷** - 粘贴问卷链接或上传/拖入二维码图片（支持问卷星和腾讯问卷）
+2. **自动解析** - 点击「自动配置问卷」，系统自动识别平台和题目结构
+3. **调整配置** - 在配置向导中针对各题设置答案权重和概率分布
+4. **设置运行参数** - 指定目标提交份数、并发浏览器数、随机IP等选项
+5. **启动任务** - 点击「开始执行」并等待任务完成（可在日志中查看进度）
 
 ---
 
 ## 关键配置说明
 
-| 配置项 | 作用 |
+| 配置项 | 说明 |
 |--------|------|
-| 目标份数 | 需要提交的问卷总数（建议先测试3-5份以验证配置） |
-| 并发数 | 同时使用的多个浏览器实例数（普通配置建议2-5个） |
-| 随机IP | 使用随机或指定的地区IP（注意：可能产生额外费用） |
-| 随机UA | 后台显示的问卷来源 |
+| **目标份数** | 计划提交的问卷总数。建议先测试 3~5 份验证配置是否正确 |
+| **并发浏览器数** | 同时运行的浏览器窗口数。普通电脑建议设置 2~5 个，过高可能导致无响应 |
+| **随机IP模式** | 是否使用随机IP或指定地区IP。使用代理IP时可能产生额外费用，请确认配额 |
+| **User-Agent** | 浏览器标识字符串，影响问卷后台显示的来源信息。建议保持随机以规避检测 |
+| **答题时长** | 每份问卷的作答时间。过短可能被识别为机器行为，建议遵循正常作答节奏 |
 
 ---
 
 ## Mac 系统支持
 
-如果你需要查看支持 macOS 系统的源码，请切换到 [mac 分支](https://github.com/hungryM0/fuck-wjx/tree/mac)。
+如果你需要查看支持 macOS 系统的源码，请切换到 [mac 分支](https://github.com/hungryM0/SurveyController/tree/mac)。
 
 **该分支由社区维护，不受长期支持。**
 
@@ -97,6 +98,7 @@ python fuck-wjx.py
 
 欢迎提交 Pull Request，改进方向包括但不限于：
 - 增加对更多题型的支持
+- 增加对更多问卷平台的支持
 - 性能优化与代码重构
 
 ---
@@ -138,4 +140,4 @@ python fuck-wjx.py
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hungryM0/fuck-wjx&type=date&legend=top-left)](https://www.star-history.com/#hungryM0/fuck-wjx&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/svg?repos=hungryM0/SurveyController&type=date&legend=top-left)](https://www.star-history.com/#hungryM0/SurveyController&type=date&legend=top-left)
