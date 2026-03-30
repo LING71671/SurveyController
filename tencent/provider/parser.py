@@ -6,6 +6,7 @@ import logging
 import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import software.network.http as http_client
 from software.app.config import DEFAULT_HTTP_HEADERS, _HTML_SPACE_RE
@@ -35,12 +36,83 @@ QQ_PROVIDER_TYPE_TO_INTERNAL = {
 _QQ_TITLE_SUFFIX_RE = re.compile(r"(?:[-|｜]\s*)?腾讯问卷.*$", re.IGNORECASE)
 _QQ_URL_RE = re.compile(r"/s\d+/(\d+)/([A-Za-z0-9_-]+)/?$", re.IGNORECASE)
 _QQ_HTTP_LOCALES = ("zhs", "zht", "zh", "en")
+_QQ_LOGIN_PATH_RE = re.compile(r"^/r/login\.html(?:/)?$", re.IGNORECASE)
+_QQ_LOGIN_REQUIRED_MESSAGE = "作答该问卷需要登录，请自行在后台开放访问权限"
+_QQ_LOGIN_REQUIRED_TOKENS = (
+    "open.weixin.qq.com/connect/confirm",
+    "wj.qq.com/r/login.html",
+    "/r/login.html",
+    "need login",
+    "login required",
+    "require login",
+    "未登录",
+    "需登录",
+    "需要登录",
+)
 
 
 def _normalize_html_text(value: Any) -> str:
     if not value:
         return ""
     return _HTML_SPACE_RE.sub(" ", str(value)).strip()
+
+
+def _is_qq_login_required_url(url: Any) -> bool:
+    text = str(url or "").strip()
+    if not text:
+        return False
+    try:
+        parsed = urlparse(text if "://" in text else f"https://{text}")
+    except Exception:
+        return False
+    host = (parsed.netloc or "").split(":", 1)[0].lower()
+    path = str(parsed.path or "").strip()
+    if host == "open.weixin.qq.com" and path.startswith("/connect/confirm"):
+        return True
+    if host == "wj.qq.com" and _QQ_LOGIN_PATH_RE.match(path):
+        return True
+    return False
+
+
+def _is_qq_login_required_error(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if _is_qq_login_required_error(key) or _is_qq_login_required_error(item):
+                return True
+        return False
+    if isinstance(value, (list, tuple, set)):
+        return any(_is_qq_login_required_error(item) for item in value)
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    return any(token in text for token in _QQ_LOGIN_REQUIRED_TOKENS)
+
+
+def _is_qq_login_required_response(response: Any) -> bool:
+    if response is None:
+        return False
+    response_url = str(getattr(response, "url", "") or "").strip()
+    if _is_qq_login_required_url(response_url):
+        return True
+    history = getattr(response, "history", None) or []
+    for item in history:
+        if _is_qq_login_required_url(getattr(item, "url", "")):
+            return True
+    headers = getattr(response, "headers", None)
+    if headers:
+        try:
+            location = headers.get("location")
+        except Exception:
+            location = None
+        if _is_qq_login_required_url(location):
+            return True
+    return _is_qq_login_required_error(getattr(response, "text", ""))
+
+
+def _raise_qq_login_required() -> None:
+    raise RuntimeError(_QQ_LOGIN_REQUIRED_MESSAGE)
 
 
 def _extract_qq_identifiers(url: str) -> Tuple[str, str]:
@@ -94,14 +166,25 @@ def _request_qq_api(
         timeout=15,
         proxies={},
     )
+    if _is_qq_login_required_response(response):
+        _raise_qq_login_required()
     response.raise_for_status()
-    payload = response.json()
+    try:
+        payload = response.json()
+    except Exception as exc:
+        if _is_qq_login_required_response(response):
+            _raise_qq_login_required()
+        raise RuntimeError(f"腾讯问卷接口返回了无法解析的响应：{endpoint}") from exc
     if not isinstance(payload, dict):
         raise RuntimeError(f"腾讯问卷接口返回了非对象响应：{endpoint}")
+    if _is_qq_login_required_error(payload):
+        _raise_qq_login_required()
     return payload
 
 
 def _ensure_qq_api_ok(payload: Dict[str, Any], endpoint: str) -> Dict[str, Any]:
+    if _is_qq_login_required_error(payload):
+        _raise_qq_login_required()
     code = str(payload.get("code") or "").upper()
     if code not in {"OK", "0"}:
         raise RuntimeError(f"腾讯问卷接口返回异常（{endpoint}）：{payload.get('code') or 'unknown'}")
@@ -153,6 +236,8 @@ def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dic
                 raise RuntimeError(f"腾讯问卷解析结果为空（locale={locale}）")
             return info, title
         except Exception as exc:
+            if _is_qq_login_required_error(exc):
+                _raise_qq_login_required()
             last_error = exc
 
     if last_error is not None:
@@ -280,11 +365,15 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
 
 
 def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
+    if _is_qq_login_required_url(url):
+        _raise_qq_login_required()
     survey_id, hash_value = _extract_qq_identifiers(url)
 
     try:
         return _fetch_qq_survey_via_http(survey_id, hash_value)
-    except Exception:
+    except Exception as exc:
+        if _is_qq_login_required_error(exc):
+            _raise_qq_login_required()
         logging.exception("腾讯问卷 HTTP 解析失败，准备回退 Playwright，url=%r", url)
 
     driver = None
@@ -299,10 +388,23 @@ def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
         page = getattr(driver, "page", None)
         if page is None:
             raise RuntimeError("当前浏览器驱动不支持腾讯问卷解析")
+        current_url = ""
+        try:
+            current_url = str(getattr(page, "url", "") or getattr(driver, "current_url", "") or "")
+        except Exception:
+            current_url = ""
+        if _is_qq_login_required_url(current_url):
+            _raise_qq_login_required()
         try:
             page.wait_for_selector("main, .question-list, .page-control", state="visible", timeout=12000)
         except Exception:
             time.sleep(2.0)
+            try:
+                current_url = str(getattr(page, "url", "") or getattr(driver, "current_url", "") or "")
+            except Exception:
+                current_url = ""
+            if _is_qq_login_required_url(current_url):
+                _raise_qq_login_required()
         payload = page.evaluate(
             """async ({ surveyId, hashValue }) => {
                 const sessionUrl = `https://wj.qq.com/api/v2/respondent/surveys/${surveyId}/session?_=${Date.now()}&hash=${encodeURIComponent(hashValue)}`;
@@ -331,11 +433,14 @@ def parse_qq_survey(url: str) -> Tuple[List[Dict[str, Any]], str]:
                     payload: json,
                     metaStatus: metaResponse.status,
                     metaPayload: metaJson,
-                    title: document.title || ''
+                    title: document.title || '',
+                    pageUrl: location.href || ''
                 };
             }""",
             {"surveyId": survey_id, "hashValue": hash_value},
         ) or {}
+        if _is_qq_login_required_url(payload.get("pageUrl")) or _is_qq_login_required_error(payload):
+            _raise_qq_login_required()
         if not bool(payload.get("ok")):
             raise RuntimeError(f"腾讯问卷题目接口请求失败（HTTP {payload.get('status') or 'unknown'}）")
         meta_payload = payload.get("metaPayload") or {}

@@ -229,6 +229,7 @@ class RunControllerParsingMixin:
             is_location = bool(q.get("is_location"))
             is_multi_text = bool(q.get("is_multi_text"))
             is_text_like = bool(q.get("is_text_like"))
+            is_slider_matrix = bool(q.get("is_slider_matrix"))
             text_inputs = int(q.get("text_inputs") or 0)
             slider_min = q.get("slider_min")
             slider_max = q.get("slider_max")
@@ -244,7 +245,9 @@ class RunControllerParsingMixin:
             provider_question_id = str(q.get("provider_question_id") or "").strip()
             provider_page_id = str(q.get("provider_page_id") or "").strip()
 
-            if is_multi_text or (is_text_like and text_inputs > 1):
+            if is_slider_matrix:
+                q_type = "matrix"
+            elif is_multi_text or (is_text_like and text_inputs > 1):
                 q_type = "multi_text"
             elif is_text_like or type_code in ("1", "2"):
                 q_type = "text"

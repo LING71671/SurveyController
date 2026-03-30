@@ -92,6 +92,22 @@ def _driver_question_looks_like_rating(question_div) -> bool:
     return False
 
 
+def _driver_question_looks_like_slider_matrix(question_div) -> bool:
+    """识别问卷星 type=9 的多行滑块题，避免误走填空兜底。"""
+    if question_div is None:
+        return False
+    try:
+        slider_inputs = question_div.find_elements(By.CSS_SELECTOR, "input.ui-slider-input[rowid]")
+    except Exception:
+        slider_inputs = []
+    if len(slider_inputs) < 2:
+        return False
+    try:
+        slider_tracks = question_div.find_elements(By.CSS_SELECTOR, ".rangeslider, .range-slider, .wjx-slider")
+    except Exception:
+        slider_tracks = []
+    return len(slider_tracks) >= len(slider_inputs)
+
 
 def _driver_question_looks_like_description(question_div, question_type: str) -> bool:
     """运行时检测说明页/阅读材料（有 type 属性但无可交互控件）。"""

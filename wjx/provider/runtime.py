@@ -11,6 +11,7 @@ from software.core.engine.dom_helpers import (
     _driver_question_looks_like_description,
     _driver_question_looks_like_rating,
     _driver_question_looks_like_reorder,
+    _driver_question_looks_like_slider_matrix,
 )
 from software.core.modes.duration_control import simulate_answer_duration_delay
 from software.core.engine.runtime_control import _is_headless_mode
@@ -122,6 +123,12 @@ class _QuestionDispatcher:
             handler=self._handle_matrix,
             needs_psycho_plan=True,
         )
+        self.register(
+            "9",
+            index_key="matrix",
+            handler=self._handle_matrix,
+            needs_psycho_plan=True,
+        )
         self.register("7", index_key="dropdown", handler=self._handle_dropdown)
         self.register("8", index_key="slider", handler=self._handle_slider)
 
@@ -215,6 +222,23 @@ class _QuestionDispatcher:
             _text_impl(driver, question_num, _idx, ctx.texts, ctx.texts_prob, ctx.text_entry_types, ctx.text_ai_flags, ctx.text_titles, ctx.multi_text_blank_modes, ctx.multi_text_blank_ai_flags, ctx.multi_text_blank_int_ranges)
             indices["text"] = _idx + 1
             return None  # 文本题内部已处理计数，返回 None
+
+        # 多行滑块题：不同问卷可能挂在 type=9 / type=12 等模板上，不能继续按题号硬编码。
+        if _driver_question_looks_like_slider_matrix(question_div):
+            sequential_idx = int(indices.get("matrix", 0) or 0)
+            mapped_idx: Optional[int] = None
+            if config_entry and config_entry[0] == "matrix":
+                try:
+                    mapped_idx = max(0, int(config_entry[1]))
+                except Exception:
+                    mapped_idx = None
+            if mapped_idx is not None and mapped_idx >= sequential_idx:
+                _idx = mapped_idx
+            else:
+                _idx = sequential_idx
+            result = self._handle_matrix(driver, question_num, _idx, ctx, psycho_plan=psycho_plan)
+            indices["matrix"] = result if isinstance(result, int) else (_idx + 1)
+            return None
 
         # 常规题型分发
         with self._lock:
@@ -434,8 +458,12 @@ def brush(
                         except Exception:
                             option_count = 0
                     text_input_count = _count_visible_text_inputs_driver(question_div) if question_div is not None else 0
+                    has_slider_matrix = _driver_question_looks_like_slider_matrix(question_div)
                     is_text_like_question = _should_treat_question_as_text_like(
-                        question_type, option_count, text_input_count
+                        question_type,
+                        option_count,
+                        text_input_count,
+                        has_slider_matrix=has_slider_matrix,
                     )
 
                     if is_text_like_question:

@@ -32,7 +32,14 @@ def _normalize_question_type_code(value: Any) -> str:
         return ""
 
 
-def _should_treat_question_as_text_like(type_code: Any, option_count: int, text_input_count: int) -> bool:
+def _should_treat_question_as_text_like(
+    type_code: Any,
+    option_count: int,
+    text_input_count: int,
+    has_slider_matrix: bool = False,
+) -> bool:
+    if has_slider_matrix:
+        return False
     normalized = _normalize_question_type_code(type_code)
     if normalized in ("1", "2", "9"):
         return text_input_count > 0

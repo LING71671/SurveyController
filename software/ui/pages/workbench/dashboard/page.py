@@ -64,6 +64,9 @@ from software.app.runtime_paths import get_runtime_directory
 from software.io.config import RuntimeConfig, build_default_config_filename
 
 
+_QQ_LOGIN_REQUIRED_MESSAGE = "作答该问卷需要登录，请自行在后台开放访问权限"
+
+
 class _PasteOnlyMenu(QObject):
     """只保留 qfluentwidgets 风格的“粘贴”菜单"""
 
@@ -648,8 +651,12 @@ class DashboardPage(
             self._progress_infobar = None
 
         text = str(error_msg or "").strip()
-        if "问卷已暂停" in text:
+        if text == _QQ_LOGIN_REQUIRED_MESSAGE:
+            self._toast(text, "warning", duration=4500)
+        elif "问卷已暂停" in text:
             self._toast("问卷已暂停，需要前往问卷星后台重新发布", "warning", duration=4500)
+        elif "暂未开放" in text:
+            self._toast(text, "warning", duration=5000)
         else:
             # 显示解析失败消息
             self._toast(f"解析失败：{text or '请确认链接有效且网络正常'}", "error", duration=3000)

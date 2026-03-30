@@ -952,6 +952,9 @@ def _extract_question_metadata_from_html(soup, question_div, question_number: in
     elif type_code == "6":
         matrix_rows, option_texts, row_texts = _collect_matrix_option_texts(soup, question_div, question_number)
         option_count = len(option_texts)
+    elif _question_div_looks_like_slider_matrix(question_div):
+        matrix_rows, option_texts, row_texts = _collect_slider_matrix_metadata(question_div)
+        option_count = len(option_texts)
     elif type_code == "8":
         option_count = 1
     return option_texts, option_count, matrix_rows, row_texts, fillable_indices, multi_min_limit, multi_max_limit
@@ -998,6 +1001,8 @@ def _extract_slider_range(question_div, question_number: int) -> Tuple[Optional[
         slider_input = question_div.find("input", id=f"q{question_number}")
         if not slider_input:
             slider_input = question_div.find("input", attrs={"type": "range"})
+        if not slider_input:
+            slider_input = question_div.find("input", class_=lambda value: value and "ui-slider-input" in str(value))
     except Exception:
         slider_input = None
 
@@ -1014,6 +1019,106 @@ def _extract_slider_range(question_div, question_number: int) -> Tuple[Optional[
             _parse(slider_input.get("step")),
         )
     return None, None, None
+
+
+def _question_div_looks_like_slider_matrix(question_div) -> bool:
+    """识别问卷星 type=9 的多行滑块题结构。"""
+    if question_div is None:
+        return False
+    try:
+        slider_inputs = question_div.select("input.ui-slider-input[rowid]")
+    except Exception:
+        slider_inputs = []
+    if len(slider_inputs) < 2:
+        return False
+    try:
+        slider_tracks = question_div.select(".rangeslider, .range-slider, .wjx-slider")
+    except Exception:
+        slider_tracks = []
+    return len(slider_tracks) >= len(slider_inputs)
+
+
+def _format_slider_matrix_value(value: float) -> str:
+    if abs(value - round(value)) < 1e-6:
+        return str(int(round(value)))
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
+def _build_slider_matrix_option_texts_from_input(slider_input) -> List[str]:
+    def _parse(raw: Any) -> Optional[float]:
+        try:
+            return float(raw)
+        except Exception:
+            return None
+
+    min_value = _parse(slider_input.get("min"))
+    max_value = _parse(slider_input.get("max"))
+    step_value = _parse(slider_input.get("step"))
+    if min_value is None or max_value is None:
+        return []
+    if step_value is None or step_value <= 0:
+        step_value = 1.0
+    if max_value < min_value:
+        min_value, max_value = max_value, min_value
+    max_count = 200
+    values: List[str] = []
+    current = min_value
+    while current <= max_value + 1e-9 and len(values) < max_count:
+        values.append(_format_slider_matrix_value(current))
+        current += step_value
+    return values
+
+
+def _collect_slider_matrix_metadata(question_div) -> Tuple[int, List[str], List[str]]:
+    """提取多行滑块题的行标题与刻度值。"""
+    if question_div is None:
+        return 0, [], []
+
+    row_texts: List[str] = []
+    option_texts: List[str] = []
+
+    try:
+        row_titles = question_div.select("tr.rowtitletr .itemTitleSpan")
+    except Exception:
+        row_titles = []
+    if not row_titles:
+        try:
+            row_titles = question_div.select("tr.rowtitletr td.title")
+        except Exception:
+            row_titles = []
+    if not row_titles:
+        try:
+            row_titles = question_div.select("tr[id$='t'] .itemTitleSpan, tr[id$='t'] td.title")
+        except Exception:
+            row_titles = []
+    for title in row_titles:
+        text = _normalize_html_text(title.get_text(" ", strip=True))
+        if text:
+            row_texts.append(text)
+
+    try:
+        scale_nodes = question_div.select(".ruler .cm[data-value]")
+    except Exception:
+        scale_nodes = []
+    seen_values = set()
+    for node in scale_nodes:
+        value = _normalize_html_text(node.get("data-value") or "")
+        if value and value not in seen_values:
+            seen_values.add(value)
+            option_texts.append(value)
+
+    try:
+        slider_inputs = question_div.select("input.ui-slider-input[rowid]")
+    except Exception:
+        slider_inputs = []
+    if not option_texts and slider_inputs:
+        option_texts = _build_slider_matrix_option_texts_from_input(slider_inputs[0])
+
+    matrix_rows = len(slider_inputs) if slider_inputs else len(row_texts)
+    if matrix_rows <= 0:
+        matrix_rows = len(question_div.select("tr[id^='drv']"))
+
+    return matrix_rows, option_texts, row_texts
 
 
 _TEXT_INPUT_ALLOWED_TYPES = {"", "text", "search", "tel", "number"}
@@ -1264,8 +1369,17 @@ def _extract_rating_option_count(question_div) -> int:
     return 0
 
 
-def _should_mark_as_multi_text(type_code: Any, option_count: int, text_input_count: int, is_location: bool, has_gapfill: bool = False) -> bool:
+def _should_mark_as_multi_text(
+    type_code: Any,
+    option_count: int,
+    text_input_count: int,
+    is_location: bool,
+    has_gapfill: bool = False,
+    has_slider_matrix: bool = False,
+) -> bool:
     if is_location:
+        return False
+    if has_slider_matrix:
         return False
     normalized = _normalize_question_type_code(type_code)
     if normalized == "9" and has_gapfill:
@@ -1351,14 +1465,29 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
             if type_code in {"3", "4"}:
                 attached_option_selects = _extract_choice_attached_selects(question_div)
             has_jump, jump_rules = _extract_jump_rules_from_html(question_div, question_number, option_texts)
+            is_slider_matrix = _question_div_looks_like_slider_matrix(question_div)
             slider_min, slider_max, slider_step = (None, None, None)
             if type_code == "8":
+                slider_min, slider_max, slider_step = _extract_slider_range(question_div, question_number)
+            elif is_slider_matrix:
                 slider_min, slider_max, slider_step = _extract_slider_range(question_div, question_number)
             text_input_count = _count_text_inputs_in_soup(question_div)
             text_input_labels = _extract_text_input_labels(question_div) if text_input_count > 1 else []
             has_gapfill = str(question_div.get("gapfill") or "").strip() == "1"
-            is_text_like_question = _should_treat_question_as_text_like(type_code, option_count, text_input_count)
-            is_multi_text = _should_mark_as_multi_text(type_code, option_count, text_input_count, is_location, has_gapfill)
+            is_text_like_question = _should_treat_question_as_text_like(
+                type_code,
+                option_count,
+                text_input_count,
+                has_slider_matrix=is_slider_matrix,
+            )
+            is_multi_text = _should_mark_as_multi_text(
+                type_code,
+                option_count,
+                text_input_count,
+                is_location,
+                has_gapfill,
+                has_slider_matrix=is_slider_matrix,
+            )
             forced_option_index: Optional[int] = None
             forced_option_text: Optional[str] = None
             if type_code in {"3", "5", "7"}:
@@ -1390,6 +1519,7 @@ def parse_survey_questions_from_html(html: str) -> List[Dict[str, Any]]:
                 "text_input_labels": text_input_labels,
                 "is_multi_text": is_multi_text,
                 "is_text_like": is_text_like_question,
+                "is_slider_matrix": is_slider_matrix,
                 "has_jump": has_jump,
                 "jump_rules": jump_rules,
                 "slider_min": slider_min,
