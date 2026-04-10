@@ -42,7 +42,7 @@ document.querySelector('#divQuestion') // 应返回元素，而非 null
 | null 返回 | 模板版本过新 | 更新解析规则以适配新模板 |
 | null 返回 | 非答题页 | 确认当前页面是否为答题正文 |
 
-详见代码：[html_parser.py L1456](../../wjx/provider/html_parser.py#L1456)
+详见代码：[html_parser.py L1456](../wjx/provider/html_parser.py#L1456)
 
 ### 1.2 多页问卷的分页标记
 
@@ -62,8 +62,8 @@ document.querySelector('#divQuestion') // 应返回元素，而非 null
 - 相同 `fieldset` 内所有题目必然属于同一页
 
 **实现位置：**
-- 🔍 静态解析：[html_parser.py L1459](../../wjx/provider/html_parser.py#L1459)
-- ⚙️ 运行时检测：[detection.py L11](../../wjx/provider/detection.py#L11)
+- 🔍 静态解析：[html_parser.py L1459](../wjx/provider/html_parser.py#L1459)
+- ⚙️ 运行时检测：[detection.py L11](../wjx/provider/detection.py#L11)
 
 **错误分页的后果（改之前 vs 改之后）：**
 - ❌ 改之前：把所有题当成一页 → 误判页数 → 下一页按钮逻辑乱掉
@@ -78,7 +78,7 @@ document.querySelector('#divQuestion') // 应返回元素，而非 null
 2. **其次** — 扫描所有含 `[topic]` 属性的元素
 3. **保底** — 识别 `.div_question`、`.question`、`.wjx_question` 等通用题型容器
 
-代码逻辑：[detection.py L20](../../wjx/provider/detection.py#L20)
+代码逻辑：[detection.py L20](../wjx/provider/detection.py#L20)
 
 **设计原则** — 防止页面布局细微变化导致错误判定为空问卷。
 
@@ -108,7 +108,7 @@ document.querySelector('#divQuestion') // 应返回元素，而非 null
 | `relation` | 显示条件 | 6,1;2 | 该题何时显示（见章6） |
 | `hasjump` | 跳题标记 | 0, 1 | 是否包含跳转逻辑（见章6） |
 
-解析实现：[html_parser.py L1461](../../wjx/provider/html_parser.py#L1461)
+解析实现：[html_parser.py L1461](../wjx/provider/html_parser.py#L1461)
 
 ### 2.2 为什么优先用 `topic` 而非视觉题号
 
@@ -130,7 +130,7 @@ actual_topic = div.get_attribute('topic')  # "1", "2", ...
 display_num = extract_display_number_from_text(title)  # "1.", "2.", ...
 ```
 
-代码参考：[html_parser.py L1465](../../wjx/provider/html_parser.py#L1465)
+代码参考：[html_parser.py L1465](../wjx/provider/html_parser.py#L1465)
 
 ---
 
@@ -159,10 +159,10 @@ display_num = extract_display_number_from_text(title)  # "1.", "2.", ...
 
 | 题型 | 检查的特征节点 | 代码位置 |
 |------|-------------|---------|
-| 排序题 | `.sortnum`、`.order-index`、`.ui-sortable` | [L1438](../../wjx/provider/html_parser.py#L1438) |
-| 数字量表/NPS | 大量数字刻度 + 两端文字标签 | [L1264](../../wjx/provider/html_parser.py#L1264) |
-| 星级评价 | `.rate-off`、`.rate-on`、`.evaluateTagWrap` | [L1381](../../wjx/provider/html_parser.py#L1381) |
-| 滑块矩阵 | 矩阵容器 + `<input type="range">` | [L1438](../../wjx/provider/html_parser.py#L1438) |
+| 排序题 | `.sortnum`、`.order-index`、`.ui-sortable` | [L1438](../wjx/provider/html_parser.py#L1438) |
+| 数字量表/NPS | 大量数字刻度 + 两端文字标签 | [L1264](../wjx/provider/html_parser.py#L1264) |
+| 星级评价 | `.rate-off`、`.rate-on`、`.evaluateTagWrap` | [L1381](../wjx/provider/html_parser.py#L1381) |
+| 滑块矩阵 | 矩阵容器 + `<input type="range">` | [L1438](../wjx/provider/html_parser.py#L1438) |
 
 **诊断顺序（强烈推荐）：**
 1. 查看题根节点的 `type` 值
@@ -221,7 +221,7 @@ display_num = extract_display_number_from_text(title)  # "1.", "2.", ...
       └─ ...其他属性
 ```
 
-代码实现：[html_parser.py L1448](../../wjx/provider/html_parser.py#L1448)
+代码实现：[html_parser.py L1448](../wjx/provider/html_parser.py#L1448)
 
 ### 4.2 为什么每题都要记录 page 字段
 `page` 字段不是装饰，直接影响运行时行为：
@@ -249,7 +249,7 @@ display_num = extract_display_number_from_text(title)  # "1.", "2.", ...
 - 题节点上：`hasjump='1'`
 - 选项节点上：`jumpto` 或 `data-jumpto` 属性
 
-**代码位置：** [html_parser.py L1013](../../wjx/provider/html_parser.py#L1013)
+**代码位置：** [html_parser.py L1013](../wjx/provider/html_parser.py#L1013)
 
 **提取结果落到：**
 - `has_jump` — 布尔值，该题有无跳转
@@ -278,8 +278,8 @@ relation='5,2;8,3'     // 当题5选2 OR 题8选3时，该题显示
 ```
 
 **代码位置：** 
-- 识别规则：[html_parser.py L1048](../../wjx/provider/html_parser.py#L1048)
-- 详细解析：[html_parser.py L1097](../../wjx/provider/html_parser.py#L1097)
+- 识别规则：[html_parser.py L1048](../wjx/provider/html_parser.py#L1048)
+- 详细解析：[html_parser.py L1097](../wjx/provider/html_parser.py#L1097)
 
 **提取结果落到：**
 - `has_display_condition` — 布尔值
@@ -341,7 +341,7 @@ nextPage()
 **第2层** — 按多个选择器依次尝试点击
 **第3层** — 若 DOM 点击失败，直接调用页面上的 JS 函数
 
-代码参考：[navigation.py L252](../../wjx/provider/navigation.py#L252)
+代码参考：[navigation.py L252](../wjx/provider/navigation.py#L252)
 
 **设计理由：**
 - 问卷星模板众多且不规范
@@ -392,11 +392,11 @@ nextPage()
 
 | 问题类型 | 优先检查 | 次要检查 |
 |---------|---------|---------|
-| 题型显示错 | [html_parser.py](../../wjx/provider/html_parser.py) | [detection.py](../../wjx/provider/detection.py) |
-| 页数识别错 | [detection.py](../../wjx/provider/detection.py) | [html_parser.py](../../wjx/provider/html_parser.py) |
-| 逻辑识别缺失 | [html_parser.py](../../wjx/provider/html_parser.py) | [detection.py](../../wjx/provider/detection.py) |
-| 翻页卡顿 | [navigation.py](../../wjx/provider/navigation.py) | [runtime.py](../../wjx/provider/runtime.py) |
-| 点击无响应 | [runtime.py](../../wjx/provider/runtime.py) | [navigation.py](../../wjx/provider/navigation.py) |
+| 题型显示错 | [html_parser.py](../wjx/provider/html_parser.py) | [detection.py](../wjx/provider/detection.py) |
+| 页数识别错 | [detection.py](../wjx/provider/detection.py) | [html_parser.py](../wjx/provider/html_parser.py) |
+| 逻辑识别缺失 | [html_parser.py](../wjx/provider/html_parser.py) | [detection.py](../wjx/provider/detection.py) |
+| 翻页卡顿 | [navigation.py](../wjx/provider/navigation.py) | [runtime.py](../wjx/provider/runtime.py) |
+| 点击无响应 | [runtime.py](../wjx/provider/runtime.py) | [navigation.py](../wjx/provider/navigation.py) |
 
 ---
 

@@ -1002,6 +1002,8 @@ def _answer_qq_dropdown(
     question: Dict[str, Any],
     config_index: int,
     ctx: TaskContext,
+    *,
+    psycho_plan: Optional[Any],
 ) -> None:
     current = int(question.get("num") or 0)
     option_texts = list(question.get("option_texts") or [])
@@ -1009,13 +1011,33 @@ def _answer_qq_dropdown(
     probabilities = ctx.droplist_prob[config_index] if config_index < len(ctx.droplist_prob) else -1
     probabilities = normalize_droplist_probs(probabilities, option_count)
     strict_ratio = is_strict_ratio_question(ctx, current)
+    dimension = ctx.question_dimension_map.get(current)
+    has_reliability_dimension = isinstance(dimension, str) and bool(str(dimension).strip())
     if not strict_ratio:
         probabilities = apply_persona_boost(option_texts, probabilities)
-    if strict_ratio:
+    if strict_ratio or has_reliability_dimension:
         strict_reference = list(probabilities)
-        probabilities = resolve_distribution_probabilities(probabilities, option_count, ctx, current)
-        probabilities = enforce_reference_rank_order(probabilities, strict_reference)
-    selected_index = weighted_index(probabilities)
+        probabilities = resolve_distribution_probabilities(
+            probabilities,
+            option_count,
+            ctx,
+            current,
+            psycho_plan=psycho_plan,
+            priority_mode=getattr(ctx, "reliability_priority_mode", None),
+        )
+        if strict_ratio:
+            probabilities = enforce_reference_rank_order(probabilities, strict_reference)
+    if has_reliability_dimension:
+        selected_index = get_tendency_index(
+            option_count,
+            probabilities,
+            dimension=dimension,
+            psycho_plan=psycho_plan,
+            question_index=current,
+            priority_mode=getattr(ctx, "reliability_priority_mode", None),
+        )
+    else:
+        selected_index = weighted_index(probabilities)
     selected_text = option_texts[selected_index] if selected_index < len(option_texts) else ""
     question_id = str(question.get("provider_question_id") or "")
     selected_ok = False
@@ -1062,7 +1084,7 @@ def _answer_qq_dropdown(
             input_type=None,
         ):
         selected_text = f"{selected_text} / {fill_value}" if selected_text else fill_value
-    if strict_ratio:
+    if strict_ratio or has_reliability_dimension:
         record_pending_distribution_choice(ctx, current, selected_index, option_count)
     record_answer(current, "dropdown", selected_indices=[selected_index], selected_texts=[selected_text])
 
@@ -1123,6 +1145,7 @@ def _answer_qq_score_like(
         ctx,
         current,
         psycho_plan=psycho_plan,
+        priority_mode=getattr(ctx, "reliability_priority_mode", None),
     )
     selected_index = get_tendency_index(
         option_count,
@@ -1130,6 +1153,7 @@ def _answer_qq_score_like(
         dimension=ctx.question_dimension_map.get(current),
         psycho_plan=psycho_plan,
         question_index=current,
+        priority_mode=getattr(ctx, "reliability_priority_mode", None),
     )
     if not _click_choice_input(driver, str(question.get("provider_question_id") or ""), "radio", selected_index):
         logging.warning("腾讯问卷第%d题（评分）点击未生效。", current)
@@ -1174,6 +1198,7 @@ def _answer_qq_matrix(
                     current,
                     row_index=row_index,
                     psycho_plan=psycho_plan,
+                    priority_mode=getattr(ctx, "reliability_priority_mode", None),
                 )
         else:
             uniform_probs = apply_matrix_row_consistency([1.0] * option_count, current, row_index)
@@ -1185,6 +1210,7 @@ def _answer_qq_matrix(
                     current,
                     row_index=row_index,
                     psycho_plan=psycho_plan,
+                    priority_mode=getattr(ctx, "reliability_priority_mode", None),
                 )
         if strict_ratio_question and isinstance(row_probabilities, list):
             row_probabilities = enforce_reference_rank_order(row_probabilities, strict_reference or row_probabilities)
@@ -1195,6 +1221,7 @@ def _answer_qq_matrix(
             psycho_plan=psycho_plan,
             question_index=current,
             row_index=row_index,
+            priority_mode=getattr(ctx, "reliability_priority_mode", None),
         )
         if not _click_matrix_cell(driver, question_id, row_index, selected_index):
             logging.warning("腾讯问卷第%d题（矩阵）第%d行点击失败。", current, row_index + 1)
@@ -1459,7 +1486,7 @@ def brush_qq(
             elif entry_type == "multiple":
                 _answer_qq_multiple(driver, question, config_index, ctx)
             elif entry_type == "dropdown":
-                _answer_qq_dropdown(driver, question, config_index, ctx)
+                _answer_qq_dropdown(driver, question, config_index, ctx, psycho_plan=psycho_plan)
             elif entry_type in {"text", "multi_text"}:
                 _answer_qq_text(driver, question, config_index, ctx)
             elif entry_type in {"scale", "score"}:
