@@ -722,6 +722,128 @@ def _click_matrix_cell(driver: BrowserDriver, provider_question_id: str, row_ind
         )
     )
 
+def _click_star_cell(driver: BrowserDriver, provider_question_id: str, row_index: int, star_index: int) -> bool:
+    """点击矩阵星级题中指定行、指定位置的星星（star_index 为 0 起始）。
+
+    腾讯问卷的星级组件基于 TDesign，使用 ``ul.t-rate`` + ``li.t-rate__star`` 结构，
+    没有 ``input[type="radio"]``，因此无法复用 _click_matrix_cell。
+    """
+    if not provider_question_id or row_index < 0 or star_index < 0:
+        return False
+    page = _page(driver)
+    return bool(
+        page.evaluate(
+            """async ({ questionId, rowIndex, starIndex }) => {
+                const section = document.querySelector(`section.question[data-question-id="${questionId}"]`);
+                if (!section || rowIndex < 0 || starIndex < 0) return false;
+
+                const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+                // ── 1. 定位行容器 ───────────────────────────────────────────
+                // 优先尝试 .question-item，其次 tbody tr，最后直接找所有 .t-rate 容器
+                let row = null;
+                const questionItems = Array.from(section.querySelectorAll('.question-item'));
+                const tableRows = Array.from(section.querySelectorAll('tbody tr'));
+                const rateContainers = Array.from(section.querySelectorAll('ul.t-rate, .t-rate'));
+
+                if (questionItems.length > rowIndex) {
+                    row = questionItems[rowIndex];
+                } else if (tableRows.length > rowIndex) {
+                    row = tableRows[rowIndex];
+                } else if (rateContainers.length > rowIndex) {
+                    // 直接用第 rowIndex 个 t-rate 作为目标容器
+                    row = rateContainers[rowIndex];
+                }
+                if (!row) return false;
+
+                try { row.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+                await wait(120);
+
+                // ── 2. 在行内找星星列表 ────────────────────────────────────
+                // TDesign: ul.t-rate > li.t-rate__star
+                // 兼容其他可能的结构
+                const starSelectors = [
+                    'li.t-rate__star',
+                    'li[class*="rate__star"]',
+                    'ul.t-rate > li',
+                    '[class*="t-rate"] > li',
+                    '[class*="rate__list"] > li',
+                    '[class*="star-list"] > li',
+                    '[class*="star"] li',
+                ];
+                let stars = [];
+                for (const sel of starSelectors) {
+                    const found = Array.from(row.querySelectorAll(sel));
+                    if (found.length > starIndex) { stars = found; break; }
+                }
+                // 如果行容器本身就是 t-rate，直接取其 li 子元素
+                if (stars.length === 0) {
+                    const tag = String(row.tagName || '').toLowerCase();
+                    if (tag === 'ul' || row.classList.contains('t-rate')) {
+                        stars = Array.from(row.querySelectorAll('li'));
+                    }
+                }
+
+                const target = stars[starIndex];
+                if (!target) return false;
+
+                // ── 3. 判断是否已选中 ──────────────────────────────────────
+                // TDesign 选中后：前 N 个 star 会带上 t-rate__star--full / t-is-active 等
+                const isSelected = () => {
+                    if (stars.length === 0) return false;
+                    const cls0 = String(stars[0].className || '');
+                    // 若第一个 star 携带 "full" 或 "active"，说明已有评分
+                    const hasActive = stars.slice(0, starIndex + 1).some((s) => {
+                        const c = String(s.className || '');
+                        return c.includes('full') || c.includes('active') || c.includes('selected') || c.includes('filled');
+                    });
+                    return hasActive;
+                };
+
+                // ── 4. 尝试点击 ────────────────────────────────────────────
+                // 部分 TDesign 版本需要先 mouseover/mousemove 再 click 才能触发 Vue 响应
+                const doClick = async (node) => {
+                    try { node.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (e) {}
+                    ['mouseover', 'mouseenter', 'mousemove'].forEach((name) => {
+                        try { node.dispatchEvent(new MouseEvent(name, { bubbles: true, cancelable: true, view: window })); } catch (e) {}
+                    });
+                    await wait(60);
+                    try { node.click(); } catch (e) {}
+                    await wait(200);
+                    if (isSelected()) return true;
+                    try { node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })); } catch (e) {}
+                    await wait(200);
+                    return isSelected();
+                };
+
+                // 先点击目标 star 内部最深的可见叶节点（通常是 SVG/icon）
+                const innerLeaf = target.querySelector('svg, use, path, i, span') || target;
+                if (await doClick(innerLeaf)) return true;
+                if (await doClick(target)) return true;
+
+                // 最后一搏：直接调用 Vue 事件（若组件挂在 __vue__/__vueParentComponent）
+                try {
+                    const vnode = target.__vueParentComponent || target.__vue__;
+                    if (vnode) {
+                        const emit = vnode.emit || (vnode.proxy && vnode.proxy.$emit);
+                        if (emit) {
+                            emit.call(vnode.proxy || vnode, 'change', starIndex + 1);
+                            await wait(200);
+                            return isSelected();
+                        }
+                    }
+                } catch (e) {}
+                return false;
+            }""",
+            {
+                "questionId": provider_question_id,
+                "rowIndex": int(row_index),
+                "starIndex": int(star_index),
+            },
+        )
+    )
+
+
 def _normalize_selected_indices(indices: Sequence[int], option_count: int) -> List[int]:
     result: List[int] = []
     seen = set()

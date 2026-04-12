@@ -20,6 +20,7 @@ from tencent.provider.submission import submit
 from .runtime_answerers import (
     _answer_qq_dropdown,
     _answer_qq_matrix,
+    _answer_qq_matrix_star,
     _answer_qq_multiple,
     _answer_qq_score_like,
     _answer_qq_single,
@@ -118,7 +119,10 @@ def brush_qq(
             elif entry_type in {"scale", "score"}:
                 _answer_qq_score_like(driver, question, config_index, ctx, psycho_plan=psycho_plan)
             elif entry_type == "matrix":
-                _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+                if question.get("provider_type") == "matrix_star":
+                    _answer_qq_matrix_star(driver, question, config_index, ctx, psycho_plan=psycho_plan)
+                else:
+                    _answer_qq_matrix(driver, question, config_index, ctx, psycho_plan=psycho_plan)
             else:
                 logging.warning("腾讯问卷第%d题暂未接入运行时类型：%s", question_num, entry_type)
 

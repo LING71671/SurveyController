@@ -517,3 +517,86 @@ def _answer_qq_multiple(
     if confirmed:
         selected_texts = [option_texts[i] for i in confirmed if i < len(option_texts)]
         record_answer(current, "multiple", selected_indices=confirmed, selected_texts=selected_texts)
+
+
+def _answer_qq_matrix_star(
+    driver: BrowserDriver,
+    question: Dict[str, Any],
+    config_index: int,
+    ctx: TaskContext,
+    *,
+    psycho_plan: Optional[Any],
+) -> int:
+    """处理腾讯问卷矩阵星级题（matrix_star）。
+
+    逻辑与普通矩阵题相同，但用 _click_star_cell 代替 _click_matrix_cell，
+    因为星级组件基于 TDesign t-rate，不含 input[type="radio"]。
+    """
+    current = int(question.get("num") or 0)
+    question_id = str(question.get("provider_question_id") or "")
+    row_count = max(1, int(question.get("rows") or 1))
+    option_count = max(2, int(question.get("options") or 0))
+    option_texts = list(question.get("option_texts") or [])
+    strict_ratio_question = is_strict_ratio_question(ctx, current)
+    next_index = config_index
+    for row_index in range(row_count):
+        raw_probabilities = ctx.matrix_prob[next_index] if next_index < len(ctx.matrix_prob) else -1
+        next_index += 1
+        strict_reference: Optional[List[float]] = None
+        row_probabilities: Any = -1
+        if isinstance(raw_probabilities, list):
+            try:
+                probs = [float(value) for value in raw_probabilities]
+            except Exception:
+                probs = []
+            if len(probs) != option_count:
+                probs = [1.0] * option_count
+            strict_reference = list(probs)
+            probs = apply_matrix_row_consistency(probs, current, row_index)
+            if any(prob > 0 for prob in probs):
+                row_probabilities = resolve_distribution_probabilities(
+                    probs,
+                    option_count,
+                    ctx,
+                    current,
+                    row_index=row_index,
+                    psycho_plan=psycho_plan,
+                    priority_mode=getattr(ctx, "reliability_priority_mode", None),
+                )
+        else:
+            uniform_probs = apply_matrix_row_consistency([1.0] * option_count, current, row_index)
+            if any(prob > 0 for prob in uniform_probs):
+                row_probabilities = resolve_distribution_probabilities(
+                    uniform_probs,
+                    option_count,
+                    ctx,
+                    current,
+                    row_index=row_index,
+                    psycho_plan=psycho_plan,
+                    priority_mode=getattr(ctx, "reliability_priority_mode", None),
+                )
+        if strict_ratio_question and isinstance(row_probabilities, list):
+            row_probabilities = enforce_reference_rank_order(row_probabilities, strict_reference or row_probabilities)
+        selected_index = get_tendency_index(
+            option_count,
+            row_probabilities,
+            dimension=ctx.question_dimension_map.get(current),
+            psycho_plan=psycho_plan,
+            question_index=current,
+            row_index=row_index,
+            priority_mode=getattr(ctx, "reliability_priority_mode", None),
+        )
+        if not _click_star_cell(driver, question_id, row_index, selected_index):
+            logging.warning("腾讯问卷第%d题（矩阵星级）第%d行点击失败。", current, row_index + 1)
+            continue
+        record_pending_distribution_choice(ctx, current, selected_index, option_count, row_index=row_index)
+        _log_qq_matrix_row_choice(
+            current,
+            row_index + 1,
+            selected_index,
+            option_texts,
+            row_probabilities,
+            raw_probabilities,
+        )
+        record_answer(current, "matrix", selected_indices=[selected_index], row_index=row_index)
+    return next_index
