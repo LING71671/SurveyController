@@ -20,6 +20,7 @@ QQ_SUPPORTED_PROVIDER_TYPES = {
     "text",
     "textarea",
     "nps",
+    "star",
     "matrix_radio",
     "matrix_star",
 }
@@ -30,6 +31,7 @@ QQ_PROVIDER_TYPE_TO_INTERNAL = {
     "text": "1",
     "textarea": "1",
     "nps": "5",
+    "star": "5",
     "matrix_radio": "6",
     "matrix_star": "6",
 }
@@ -248,7 +250,7 @@ def _fetch_qq_survey_via_http(survey_id: str, hash_value: str) -> Tuple[List[Dic
 
 
 def _build_option_texts(question: Dict[str, Any], provider_type: str) -> List[str]:
-    if provider_type == "nps":
+    if provider_type in {"nps", "star"}:
         start = int(question.get("star_begin_num") or 0)
         count = max(0, int(question.get("star_num") or 0))
         return [str(start + idx) for idx in range(count)]
@@ -316,7 +318,7 @@ def _build_row_texts(question: Dict[str, Any]) -> List[str]:
 
 
 def _resolve_option_count(question: Dict[str, Any], provider_type: str, option_texts: List[str]) -> int:
-    if provider_type == "nps":
+    if provider_type in {"nps", "star"}:
         return max(len(option_texts), int(question.get("star_num") or 0))
     if provider_type == "matrix_star":
         return max(len(option_texts), int(question.get("star_num") or 0))
@@ -360,7 +362,7 @@ def _standardize_qq_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
         supported = provider_type in QQ_SUPPORTED_PROVIDER_TYPES
         unsupported_reason = "" if supported else f"暂不支持腾讯题型：{provider_type or 'unknown'}"
         is_text_like = provider_type in {"text", "textarea"}
-        is_rating = provider_type == "nps"
+        is_rating = provider_type in {"nps", "star"}
         multi_min_limit = question.get("min_length") if provider_type == "checkbox" else None
         multi_max_limit = question.get("max_length") if provider_type == "checkbox" else None
         normalized.append({
