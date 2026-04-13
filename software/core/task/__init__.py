@@ -13,7 +13,13 @@ from software.core.task.event_bus import (
     EventBus,
     bus,
 )
-from software.core.task.task_context import ProxyLease, TaskContext, ThreadProgressState
+from software.core.task.task_context import (
+    ExecutionConfig,
+    ExecutionState,
+    ProxyLease,
+    TaskContext,
+    ThreadProgressState,
+)
 
 __all__ = [
     "EventBus",
@@ -27,6 +33,8 @@ __all__ = [
     "EVENT_SUBMIT_SUCCESS",
     "EVENT_SUBMIT_FAILURE",
     "EVENT_IP_COUNTER_UPDATED",
+    "ExecutionConfig",
+    "ExecutionState",
     "ProxyLease",
     "TaskContext",
     "ThreadProgressState",

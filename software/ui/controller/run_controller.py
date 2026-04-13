@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal
 
 from software.core.questions.config import QuestionEntry
-from software.core.task import TaskContext
+from software.core.task import ExecutionConfig, ExecutionState
 from software.ui.controller.run_controller_parts import (
     RunControllerParsingMixin,
     RunControllerPersistenceMixin,
@@ -56,7 +56,7 @@ class EngineGuiAdapter:
         self._on_random_ip_loading = on_random_ip_loading
         self._message_handler = message_handler
         self._confirm_handler = confirm_handler
-        self.task_ctx: Optional[TaskContext] = None
+        self.execution_state: Optional[ExecutionState] = None
         self._pause_event = threading.Event()
         self._pause_reason = ""
         self._cleanup_runner = cleanup_runner
@@ -216,7 +216,7 @@ class RunController(
         self.survey_provider = "wjx"
         self.stop_event = threading.Event()
         self.worker_threads: List[threading.Thread] = []
-        self._task_ctx: Optional[TaskContext] = None
+        self._execution_state: Optional[ExecutionState] = None
         self._cleanup_runner = CleanupRunner()
         self.on_ip_counter: Optional[Callable[[float, float, bool], None]] = None
         self.on_random_ip_loading: Optional[Callable[[bool, str], None]] = None
@@ -240,7 +240,7 @@ class RunController(
         self._init_completed_steps: Set[str] = set()
         self._init_current_step_key = ""
         self._init_gate_stop_event: Optional[threading.Event] = None
-        self._pending_question_ctx: Optional[TaskContext] = None
+        self._pending_execution_config: Optional[ExecutionConfig] = None
         self._runtime_ui_state: Dict[str, Any] = {}
         self._random_ip_toggle_lock = threading.Lock()
         self._random_ip_toggle_active = False

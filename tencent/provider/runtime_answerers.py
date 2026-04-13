@@ -20,13 +20,14 @@ from software.core.questions.utils import (
     resolve_option_fill_text_from_config,
     weighted_index,
 )
-from software.core.task import TaskContext
+from software.core.task import ExecutionState
 from software.network.browser import BrowserDriver
 
 from .runtime_interactions import (
     _apply_multiple_constraints,
     _click_choice_input,
     _click_matrix_cell,
+    _click_star_cell,
     _describe_dropdown_state,
     _fill_choice_option_additional_text,
     _fill_text_question,
@@ -82,7 +83,7 @@ def _answer_qq_single(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
 ) -> None:
     current = int(question.get("num") or 0)
     option_texts = list(question.get("option_texts") or [])
@@ -126,7 +127,7 @@ def _answer_qq_dropdown(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
 ) -> None:
@@ -217,7 +218,7 @@ def _answer_qq_text(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
 ) -> None:
     current = int(question.get("num") or 0)
     answer_candidates = ctx.texts[config_index] if config_index < len(ctx.texts) else [DEFAULT_FILL_TEXT]
@@ -253,7 +254,7 @@ def _answer_qq_score_like(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
 ) -> None:
@@ -288,7 +289,7 @@ def _answer_qq_matrix(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
 ) -> int:
@@ -365,7 +366,7 @@ def _answer_qq_multiple(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
 ) -> None:
     current = int(question.get("num") or 0)
     option_texts = list(question.get("option_texts") or [])
@@ -523,7 +524,7 @@ def _answer_qq_matrix_star(
     driver: BrowserDriver,
     question: Dict[str, Any],
     config_index: int,
-    ctx: TaskContext,
+    ctx: ExecutionState,
     *,
     psycho_plan: Optional[Any],
 ) -> int:

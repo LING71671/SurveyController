@@ -9,7 +9,7 @@ import httpx
 
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
 from software.core.questions.utils import extract_text_from_element as _extract_text_from_element
-from software.core.task import TaskContext
+from software.core.task import ExecutionState
 from software.network.browser import By, BrowserDriver, NoSuchElementException, TimeoutException
 import software.network.http as http_client
 from software.network.proxy import (
@@ -283,13 +283,13 @@ def _is_retryable_submit_proxy_error(exc: BaseException) -> bool:
     return isinstance(exc, _HEADLESS_SUBMIT_RETRYABLE_ERRORS)
 
 
-def _required_submit_proxy_ttl_seconds(ctx: Optional[TaskContext]) -> int:
+def _required_submit_proxy_ttl_seconds(ctx: Optional[ExecutionState]) -> int:
     if ctx is None:
         return 20
     return int(get_proxy_required_ttl_seconds(getattr(ctx, "answer_duration_range_seconds", (0, 0))))
 
 
-def _remove_proxy_from_ctx_pool(ctx: TaskContext, proxy_address: Optional[str]) -> bool:
+def _remove_proxy_from_ctx_pool(ctx: ExecutionState, proxy_address: Optional[str]) -> bool:
     normalized = normalize_proxy_address(proxy_address)
     if not normalized:
         return False
@@ -309,7 +309,7 @@ def _remove_proxy_from_ctx_pool(ctx: TaskContext, proxy_address: Optional[str]) 
     return removed
 
 
-def _pop_replacement_proxy_from_pool_locked(ctx: TaskContext, current_proxy: Optional[str]) -> Optional[str]:
+def _pop_replacement_proxy_from_pool_locked(ctx: ExecutionState, current_proxy: Optional[str]) -> Optional[str]:
     required_ttl = _required_submit_proxy_ttl_seconds(ctx)
     current = normalize_proxy_address(current_proxy)
     retained = []
@@ -333,7 +333,7 @@ def _pop_replacement_proxy_from_pool_locked(ctx: TaskContext, current_proxy: Opt
 
 def _acquire_replacement_submit_proxy(
     driver: BrowserDriver,
-    ctx: Optional[TaskContext],
+    ctx: Optional[ExecutionState],
     *,
     stop_signal: Optional[threading.Event],
 ) -> Optional[str]:
@@ -542,7 +542,7 @@ def _capture_submit_request_via_route(
 def _submit_via_headless_httpx(
     driver: BrowserDriver,
     *,
-    ctx: Optional[TaskContext],
+    ctx: Optional[ExecutionState],
     stop_signal: Optional[threading.Event],
     settle_delay: float,
 ) -> None:
@@ -644,7 +644,7 @@ def consume_headless_httpx_submit_success(driver: BrowserDriver) -> bool:
 
 def submit(
     driver: BrowserDriver,
-    ctx: Optional[TaskContext] = None,
+    ctx: Optional[ExecutionState] = None,
     stop_signal: Optional[threading.Event] = None,
 ):
     """点击提交按钮并结束。

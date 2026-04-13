@@ -54,12 +54,12 @@ software/
 ├── core/                  # 共享执行核心
 │   ├── ai/                # AI 填空共享逻辑
 │   ├── config/            # 配置结构与编解码
-│   ├── engine/            # 共享执行流程（runner/cleanup/公共预处理）；平台专属导航/提交不再放这里
+│   ├── engine/            # 共享执行流程；runner.py 仅保留薄入口，浏览器生命周期/停止策略/提交判定/线程主循环已拆到 browser_session_service.py、run_stop_policy.py、submission_service.py、execution_loop.py
 │   ├── modes/             # 作答模式与时长控制
 │   ├── persona/           # 人设与上下文生成
 │   ├── psychometrics/     # 心理测量题辅助逻辑
-│   ├── questions/         # 题目配置、分布、共享判定与文本共享常量；平台 DOM 执行器不再放这里
-│   └── task/              # TaskContext、事件总线、线程进度模型
+│   ├── questions/         # 题目配置、分布、共享判定与文本共享常量；config.py 仅保留门面导出，schema.py/default_builder.py/normalization.py/validation.py 才是当前权威拆分
+│   └── task/              # 事件总线与执行模型；当前权威模型为 ExecutionConfig + ExecutionState，task_context.py 内只保留过渡别名供旧类型引用
 ├── integrations/
 │   └── ai/                # AI API 适配器
 ├── io/
@@ -72,7 +72,7 @@ software/
 │   ├── http/              # httpx 客户端封装
 │   ├── browser/           # 浏览器驱动
 │   └── proxy/             # 代理 API / 会话 / 策略 / 地区 / 代理池；session/auth.py 仅保留状态与入口，HTTP/归一化/模型拆到 session/client.py、normalize.py、models.py
-├── providers/             # 平台识别、注册、分发总入口
+├── providers/             # 平台识别、注册、分发总入口；contracts.py 统一 SurveyDefinition 契约，registry.py 负责 provider 对象分发
 ├── system/                # Windows/系统级能力（安全存储、注册表）
 ├── ui/
 │   ├── shell/             # 主窗口、启动页、页面装配

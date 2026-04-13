@@ -2,13 +2,13 @@
 from typing import Any, Optional, Tuple
 import logging
 
-from software.core.task import ProxyLease, TaskContext
+from software.core.task import ExecutionState, ProxyLease
 from software.network.proxy.pool import coerce_proxy_lease, mask_proxy_for_log
 from software.network.proxy.api import fetch_proxy_batch
 from software.network.proxy import get_proxy_required_ttl_seconds, proxy_lease_has_sufficient_ttl
 from software.io.config import _select_user_agent_from_ratios
 def _record_bad_proxy_and_maybe_pause(
-    ctx: TaskContext,
+    ctx: ExecutionState,
     gui_instance: Optional[Any],
 ) -> bool:
     """
@@ -19,11 +19,11 @@ def _record_bad_proxy_and_maybe_pause(
     return False
 
 
-def _required_proxy_ttl_seconds(ctx: TaskContext) -> int:
+def _required_proxy_ttl_seconds(ctx: ExecutionState) -> int:
     return int(get_proxy_required_ttl_seconds(getattr(ctx, "answer_duration_range_seconds", (0, 0))))
 
 
-def _purge_unusable_proxy_pool_locked(ctx: TaskContext) -> None:
+def _purge_unusable_proxy_pool_locked(ctx: ExecutionState) -> None:
     required_ttl = _required_proxy_ttl_seconds(ctx)
     kept = []
     seen = set()
@@ -50,7 +50,7 @@ def _purge_unusable_proxy_pool_locked(ctx: TaskContext) -> None:
     ctx.proxy_ip_pool = kept
 
 
-def _pop_available_proxy_lease_locked(ctx: TaskContext) -> Optional[ProxyLease]:
+def _pop_available_proxy_lease_locked(ctx: ExecutionState) -> Optional[ProxyLease]:
     _purge_unusable_proxy_pool_locked(ctx)
     while ctx.proxy_ip_pool:
         lease = coerce_proxy_lease(ctx.proxy_ip_pool.pop(0))
@@ -63,7 +63,7 @@ def _pop_available_proxy_lease_locked(ctx: TaskContext) -> Optional[ProxyLease]:
     return None
 
 
-def _mark_proxy_in_use(ctx: TaskContext, thread_name: str, lease: Optional[ProxyLease]) -> Optional[str]:
+def _mark_proxy_in_use(ctx: ExecutionState, thread_name: str, lease: Optional[ProxyLease]) -> Optional[str]:
     if lease is None:
         return None
     if thread_name:
@@ -77,7 +77,7 @@ def _mark_proxy_in_use(ctx: TaskContext, thread_name: str, lease: Optional[Proxy
     return lease.address
 
 
-def _resolve_proxy_request_num_locked(ctx: TaskContext) -> int:
+def _resolve_proxy_request_num_locked(ctx: ExecutionState) -> int:
     waiting_count = max(1, int(ctx.proxy_waiting_threads or 0))
     active_count = len(ctx.proxy_in_use_by_thread)
     remaining_to_start = max(0, int(ctx.target_num or 0) - int(ctx.cur_num or 0) - active_count)
@@ -86,7 +86,7 @@ def _resolve_proxy_request_num_locked(ctx: TaskContext) -> int:
     return max(1, min(waiting_count, remaining_to_start, 80))
 
 
-def _select_proxy_for_session(ctx: TaskContext, thread_name: str = "") -> Optional[str]:
+def _select_proxy_for_session(ctx: ExecutionState, thread_name: str = "") -> Optional[str]:
     if not ctx.random_proxy_ip_enabled:
         return None
     selected: Optional[ProxyLease] = None
@@ -149,13 +149,13 @@ def _select_proxy_for_session(ctx: TaskContext, thread_name: str = "") -> Option
         ctx.unregister_proxy_waiter()
 
 
-def _select_user_agent_for_session(ctx: TaskContext) -> Tuple[Optional[str], Optional[str]]:
+def _select_user_agent_for_session(ctx: ExecutionState) -> Tuple[Optional[str], Optional[str]]:
     if not ctx.random_user_agent_enabled:
         return None, None
     return _select_user_agent_from_ratios(ctx.user_agent_ratios)
 
 
-def _discard_unresponsive_proxy(ctx: TaskContext, proxy_address: str) -> None:
+def _discard_unresponsive_proxy(ctx: ExecutionState, proxy_address: str) -> None:
     if not proxy_address:
         return
     with ctx.lock:

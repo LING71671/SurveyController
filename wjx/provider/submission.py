@@ -18,7 +18,7 @@ from wjx.provider._submission_core import (
     _is_device_quota_limit_page,
     submit,
 )
-from software.core.task import EVENT_CAPTCHA_DETECTED, TaskContext, bus as _event_bus
+from software.core.task import EVENT_CAPTCHA_DETECTED, ExecutionState, bus as _event_bus
 from software.logging.log_utils import log_popup_confirm, log_popup_warning
 from software.network.browser import By, BrowserDriver
 
@@ -149,7 +149,7 @@ def wait_for_submission_verification(
 
 
 def _trigger_aliyun_captcha_stop(
-    ctx: TaskContext,
+    ctx: ExecutionState,
     gui_instance: Optional[Any],
     stop_signal: Optional[threading.Event],
 ) -> None:
@@ -269,7 +269,7 @@ def _trigger_aliyun_captcha_stop(
 
 
 def handle_submission_verification_detected(
-    ctx: TaskContext,
+    ctx: ExecutionState,
     gui_instance: Optional[Any],
     stop_signal: Optional[threading.Event],
 ) -> None:

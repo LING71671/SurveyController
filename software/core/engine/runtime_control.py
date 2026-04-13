@@ -4,23 +4,23 @@ import threading
 import time
 from typing import Any, Optional
 
-from software.core.task import EVENT_TARGET_REACHED, TaskContext, bus as _event_bus
+from software.core.task import EVENT_TARGET_REACHED, ExecutionState, bus as _event_bus
 from software.logging.log_utils import log_suppressed_exception
 
 FAILURE_REASON_DEVICE_QUOTA_LIMIT = "device_quota_limit"
 
 
-def _is_headless_mode(ctx: Optional[TaskContext]) -> bool:
+def _is_headless_mode(ctx: Optional[ExecutionState]) -> bool:
     """当前任务是否启用无头模式。"""
     return bool(ctx is not None and getattr(ctx, "headless_mode", False))
 
 
-def _timed_mode_active(ctx: TaskContext) -> bool:
+def _timed_mode_active(ctx: ExecutionState) -> bool:
     return bool(ctx.timed_mode_enabled)
 
 
 def _handle_submission_failure(
-    ctx: TaskContext,
+    ctx: ExecutionState,
     stop_signal: Optional[threading.Event],
     thread_name: Optional[str] = None,
     *,
@@ -70,7 +70,7 @@ def _wait_if_paused(gui_instance: Optional[Any], stop_signal: Optional[threading
 
 
 def _trigger_target_reached_stop(
-    ctx: TaskContext,
+    ctx: ExecutionState,
     stop_signal: Optional[threading.Event],
     gui_instance: Optional[Any] = None,
 ) -> None:

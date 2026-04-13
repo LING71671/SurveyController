@@ -11,7 +11,7 @@ from PySide6.QtCore import QCoreApplication
 from software.app.config import STOP_FORCE_WAIT_SECONDS
 from software.core.engine.runner import run
 from software.core.questions.config import configure_probabilities, validate_question_config
-from software.core.task import EVENT_TASK_STARTED, EVENT_TASK_STOPPED, ProxyLease, TaskContext
+from software.core.task import EVENT_TASK_STARTED, EVENT_TASK_STOPPED, ExecutionConfig, ExecutionState, ProxyLease
 from software.core.task import bus as _event_bus
 from software.io.config import RuntimeConfig
 from software.network.proxy import set_proxy_occupy_minute_by_answer_duration
@@ -51,8 +51,8 @@ class RunControllerExecutionMixin:
         _init_completed_steps: set[str]
         _init_current_step_key: str
         _init_gate_stop_event: Optional[threading.Event]
-        _pending_question_ctx: Optional[TaskContext]
-        _task_ctx: Optional[TaskContext]
+        _pending_execution_config: Optional[ExecutionConfig]
+        _execution_state: Optional[ExecutionState]
         survey_provider: str
         question_entries: List[Any]
         questions_info: List[Dict[str, Any]]
@@ -64,8 +64,8 @@ class RunControllerExecutionMixin:
         def toggle_random_ip(self, enabled: bool, *, adapter: Optional[Any] = None) -> bool: ...
         def handle_random_ip_submission(self, *, stop_signal: Optional[threading.Event], adapter: Optional[Any] = None) -> None: ...
         def _start_with_initialization_gate(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> None: ...
-        def _prepare_engine_state(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> TaskContext: ...
-        def _apply_pending_question_ctx(self, ctx: TaskContext, *, consume: bool) -> None: ...
+        def _prepare_engine_state(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]: ...
+        def _apply_pending_execution_config(self, config: ExecutionConfig, *, consume: bool) -> None: ...
         def _reset_initialization_state(self) -> None: ...
         def _build_initialization_logs(self) -> List[str]: ...
 
@@ -175,12 +175,12 @@ class RunControllerExecutionMixin:
             logging.info("同步随机IP占用时长失败", exc_info=True)
 
         logging.info("配置题目概率分布（共%s题）", len(config.question_entries))
-        _tmp_ctx = TaskContext()
-        _tmp_ctx.survey_provider = str(getattr(config, "survey_provider", "wjx") or "wjx")
+        pending_config = ExecutionConfig()
+        pending_config.survey_provider = str(getattr(config, "survey_provider", "wjx") or "wjx")
         try:
             configure_probabilities(
                 config.question_entries,
-                ctx=_tmp_ctx,
+                ctx=pending_config,
                 reliability_mode_enabled=getattr(config, "reliability_mode_enabled", True),
             )
         except Exception as exc:
@@ -189,13 +189,13 @@ class RunControllerExecutionMixin:
             self.runFailed.emit(str(exc))
             return
 
-        _tmp_ctx.questions_metadata = {}
+        pending_config.questions_metadata = {}
         if hasattr(self, "questions_info") and self.questions_info:
             for q_info in self.questions_info:
                 q_num = q_info.get("num")
                 if q_num:
-                    _tmp_ctx.questions_metadata[q_num] = q_info
-        self._pending_question_ctx = _tmp_ctx
+                    pending_config.questions_metadata[q_num] = q_info
+        self._pending_execution_config = pending_config
 
         self._start_with_initialization_gate(config, [])
     def _start_workers_with_proxy_pool(
@@ -205,11 +205,11 @@ class RunControllerExecutionMixin:
         *,
         emit_run_state: bool = True,
     ) -> None:
-        ctx = self._prepare_engine_state(config, proxy_pool)
-        ctx.ensure_worker_threads(max(1, int(config.threads or 1)))
-        self._apply_pending_question_ctx(ctx, consume=True)
-        self._task_ctx = ctx
-        self.adapter.task_ctx = ctx
+        execution_config, execution_state = self._prepare_engine_state(config, proxy_pool)
+        execution_state.ensure_worker_threads(max(1, int(config.threads or 1)))
+        self._apply_pending_execution_config(execution_config, consume=True)
+        self._execution_state = execution_state
+        self.adapter.execution_state = execution_state
 
         self.config.headless_mode = bool(getattr(config, "headless_mode", False))
         self.config.threads = max(1, int(config.threads or 1))
@@ -219,7 +219,7 @@ class RunControllerExecutionMixin:
             self.runStateChanged.emit(True)
         self._status_timer.start()
 
-        _event_bus.emit(EVENT_TASK_STARTED, ctx=ctx)
+        _event_bus.emit(EVENT_TASK_STARTED, state=execution_state, config=execution_config)
 
         logging.info("创建%s个工作线程", config.threads)
         threads: List[threading.Thread] = []
@@ -229,7 +229,7 @@ class RunControllerExecutionMixin:
             t = threading.Thread(
                 target=run,
                 args=(x, y, self.stop_event, self.adapter),
-                kwargs={"ctx": ctx},
+                kwargs={"config": execution_config, "state": execution_state},
                 daemon=True,
                 name=f"Worker-{idx+1}",
             )
@@ -355,7 +355,7 @@ class RunControllerExecutionMixin:
                 self.pauseStateChanged.emit(False, "")
             return
 
-        ctx = self._task_ctx
+        ctx = self._execution_state
         current = getattr(ctx, "cur_num", 0)
         target = getattr(ctx, "target_num", 0)
         fail = getattr(ctx, "cur_fail", 0)

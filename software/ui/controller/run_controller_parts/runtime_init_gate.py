@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from software.core.engine.runner import run
 from software.core.questions.reliability_mode import normalize_reliability_priority_mode
-from software.core.task import ProxyLease, TaskContext
+from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.io.config import RuntimeConfig
 from software.network.proxy import get_effective_proxy_api_url, is_custom_proxy_api_active
 from software.network.proxy.session import (
@@ -34,8 +34,8 @@ class RunControllerInitializationMixin:
         _starting: bool
         _initializing: bool
         _status_timer: Any
-        _task_ctx: Optional[TaskContext]
-        _pending_question_ctx: Optional[TaskContext]
+        _execution_state: Optional[ExecutionState]
+        _pending_execution_config: Optional[ExecutionConfig]
         _probe_hit_device_quota: bool
         _probe_failure_message: str
         _init_stage_text: str
@@ -63,8 +63,8 @@ class RunControllerInitializationMixin:
         def _create_adapter(self, stop_signal: threading.Event, *, random_ip_enabled: bool = False) -> Any: ...
         def set_runtime_ui_state(self, emit: bool = True, **updates: Any) -> Dict[str, Any]: ...
 
-    def _prepare_engine_state(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> TaskContext:
-        """构建本次任务的 TaskContext。"""
+    def _prepare_engine_state(self, config: RuntimeConfig, proxy_pool: List[ProxyLease]) -> tuple[ExecutionConfig, ExecutionState]:
+        """构建本次任务的 ExecutionConfig 与 ExecutionState。"""
         fail_threshold = 5
         config_title = str(getattr(config, "survey_title", "") or "")
         fallback_title = str(getattr(self, "survey_title", "") or "")
@@ -78,7 +78,7 @@ class RunControllerInitializationMixin:
             getattr(config, "reliability_priority_mode", None)
         )
 
-        ctx = TaskContext(
+        execution_config = ExecutionConfig(
             url=config.url,
             survey_title=survey_title,
             survey_provider=str(getattr(config, "survey_provider", "wjx") or "wjx"),
@@ -87,9 +87,6 @@ class RunControllerInitializationMixin:
             headless_mode=getattr(config, "headless_mode", False),
             browser_preference=list(getattr(config, "browser_preference", []) or []),
             fail_threshold=fail_threshold,
-            cur_num=0,
-            cur_fail=0,
-            stop_event=self.stop_event,
             submit_interval_range_seconds=(int(config.submit_interval[0]), int(config.submit_interval[1])),
             answer_duration_range_seconds=(int(config.answer_duration[0]), int(config.answer_duration[1])),
             timed_mode_enabled=config.timed_mode_enabled,
@@ -104,37 +101,38 @@ class RunControllerInitializationMixin:
             stop_on_fail_enabled=config.fail_stop_enabled,
             pause_on_aliyun_captcha=bool(getattr(config, "pause_on_aliyun_captcha", True)),
         )
-        return ctx
-    def _apply_pending_question_ctx(self, ctx: TaskContext, *, consume: bool) -> None:
-        pending = self._pending_question_ctx
+        execution_state = ExecutionState(config=execution_config, stop_event=self.stop_event)
+        return execution_config, execution_state
+    def _apply_pending_execution_config(self, config: ExecutionConfig, *, consume: bool) -> None:
+        pending = self._pending_execution_config
         if pending is None:
             return
-        ctx.single_prob = copy.deepcopy(pending.single_prob)
-        ctx.droplist_prob = copy.deepcopy(pending.droplist_prob)
-        ctx.multiple_prob = copy.deepcopy(pending.multiple_prob)
-        ctx.matrix_prob = copy.deepcopy(pending.matrix_prob)
-        ctx.scale_prob = copy.deepcopy(pending.scale_prob)
-        ctx.slider_targets = copy.deepcopy(pending.slider_targets)
-        ctx.texts = copy.deepcopy(pending.texts)
-        ctx.texts_prob = copy.deepcopy(pending.texts_prob)
-        ctx.text_entry_types = copy.deepcopy(pending.text_entry_types)
-        ctx.text_ai_flags = copy.deepcopy(pending.text_ai_flags)
-        ctx.text_titles = copy.deepcopy(pending.text_titles)
-        ctx.multi_text_blank_modes = copy.deepcopy(pending.multi_text_blank_modes)
-        ctx.multi_text_blank_ai_flags = copy.deepcopy(pending.multi_text_blank_ai_flags)
-        ctx.multi_text_blank_int_ranges = copy.deepcopy(getattr(pending, "multi_text_blank_int_ranges", []))
-        ctx.single_option_fill_texts = copy.deepcopy(pending.single_option_fill_texts)
-        ctx.single_attached_option_selects = copy.deepcopy(pending.single_attached_option_selects)
-        ctx.droplist_option_fill_texts = copy.deepcopy(pending.droplist_option_fill_texts)
-        ctx.multiple_option_fill_texts = copy.deepcopy(pending.multiple_option_fill_texts)
-        ctx.question_config_index_map = copy.deepcopy(pending.question_config_index_map)
-        ctx.question_dimension_map = copy.deepcopy(pending.question_dimension_map)
-        ctx.question_strict_ratio_map = copy.deepcopy(getattr(pending, "question_strict_ratio_map", {}))
-        ctx.question_psycho_bias_map = copy.deepcopy(pending.question_psycho_bias_map)
-        ctx.questions_metadata = copy.deepcopy(pending.questions_metadata)
-        ctx.survey_provider = str(getattr(pending, "survey_provider", getattr(ctx, "survey_provider", "wjx")) or "wjx")
+        config.single_prob = copy.deepcopy(pending.single_prob)
+        config.droplist_prob = copy.deepcopy(pending.droplist_prob)
+        config.multiple_prob = copy.deepcopy(pending.multiple_prob)
+        config.matrix_prob = copy.deepcopy(pending.matrix_prob)
+        config.scale_prob = copy.deepcopy(pending.scale_prob)
+        config.slider_targets = copy.deepcopy(pending.slider_targets)
+        config.texts = copy.deepcopy(pending.texts)
+        config.texts_prob = copy.deepcopy(pending.texts_prob)
+        config.text_entry_types = copy.deepcopy(pending.text_entry_types)
+        config.text_ai_flags = copy.deepcopy(pending.text_ai_flags)
+        config.text_titles = copy.deepcopy(pending.text_titles)
+        config.multi_text_blank_modes = copy.deepcopy(pending.multi_text_blank_modes)
+        config.multi_text_blank_ai_flags = copy.deepcopy(pending.multi_text_blank_ai_flags)
+        config.multi_text_blank_int_ranges = copy.deepcopy(getattr(pending, "multi_text_blank_int_ranges", []))
+        config.single_option_fill_texts = copy.deepcopy(pending.single_option_fill_texts)
+        config.single_attached_option_selects = copy.deepcopy(pending.single_attached_option_selects)
+        config.droplist_option_fill_texts = copy.deepcopy(pending.droplist_option_fill_texts)
+        config.multiple_option_fill_texts = copy.deepcopy(pending.multiple_option_fill_texts)
+        config.question_config_index_map = copy.deepcopy(pending.question_config_index_map)
+        config.question_dimension_map = copy.deepcopy(pending.question_dimension_map)
+        config.question_strict_ratio_map = copy.deepcopy(getattr(pending, "question_strict_ratio_map", {}))
+        config.question_psycho_bias_map = copy.deepcopy(pending.question_psycho_bias_map)
+        config.questions_metadata = copy.deepcopy(pending.questions_metadata)
+        config.survey_provider = str(getattr(pending, "survey_provider", getattr(config, "survey_provider", "wjx")) or "wjx")
         if consume:
-            self._pending_question_ctx = None
+            self._pending_execution_config = None
     def _should_use_initialization_gate(self, config: RuntimeConfig) -> bool:
         headless_mode = bool(getattr(config, "headless_mode", False))
         thread_count = max(1, int(getattr(config, "threads", 1) or 1))
@@ -241,7 +239,7 @@ class RunControllerInitializationMixin:
         self._setup_initialization_progress(config)
         if should_use_gate and not requires_network_init:
             self._set_initialization_stage("playwright", "初始化Playwright浏览器环境")
-        self._task_ctx = None
+        self._execution_state = None
         self.runStateChanged.emit(True)
         self._status_timer.start()
         self._emit_status()
@@ -502,15 +500,15 @@ class RunControllerInitializationMixin:
         # 门禁探测只用于验证流程可用性，不应消耗作答时长等待。
         probe_config.answer_duration = (0, 0)
 
-        probe_ctx = self._prepare_engine_state(probe_config, list(proxy_pool))
-        probe_ctx.stop_event = gate_stop_event
-        probe_ctx.ensure_worker_threads(1)
-        self._apply_pending_question_ctx(probe_ctx, consume=False)
+        probe_execution_config, probe_state = self._prepare_engine_state(probe_config, list(proxy_pool))
+        probe_state.stop_event = gate_stop_event
+        probe_state.ensure_worker_threads(1)
+        self._apply_pending_execution_config(probe_execution_config, consume=False)
         probe_adapter = self._create_adapter(gate_stop_event, random_ip_enabled=probe_config.random_ip_enabled)
-        probe_adapter.task_ctx = probe_ctx
+        probe_adapter.execution_state = probe_state
 
         try:
-            run(50, 50, gate_stop_event, probe_adapter, ctx=probe_ctx)
+            run(50, 50, gate_stop_event, probe_adapter, config=probe_execution_config, state=probe_state)
         except Exception:
             logging.error("初始化门禁：%s单线程测试发生异常", mode_text, exc_info=True)
         finally:
@@ -524,8 +522,8 @@ class RunControllerInitializationMixin:
         if self.stop_event.is_set():
             logging.info("初始化门禁：%s单线程测试已取消", mode_text)
             return None
-        success = int(getattr(probe_ctx, "cur_num", 0) or 0) >= 1
-        device_quota_fail_count = max(0, int(getattr(probe_ctx, "device_quota_fail_count", 0) or 0))
+        success = int(getattr(probe_state, "cur_num", 0) or 0) >= 1
+        device_quota_fail_count = max(0, int(getattr(probe_state, "device_quota_fail_count", 0) or 0))
         if device_quota_fail_count > 0:
             self._probe_hit_device_quota = True
             self._probe_failure_message = DEVICE_QUOTA_LIMIT_MESSAGE
@@ -581,7 +579,7 @@ class RunControllerInitializationMixin:
         was_running = bool(self.running)
         self.running = False
         self.worker_threads = []
-        self._task_ctx = None
+        self._execution_state = None
         if was_running:
             self.runStateChanged.emit(False)
         self.statusUpdated.emit("初始化失败", 0, 0)

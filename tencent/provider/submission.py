@@ -15,7 +15,7 @@ from software.app.config import (
 )
 from software.core.engine.runtime_control import _is_headless_mode, _sleep_with_stop
 from software.core.questions.utils import extract_text_from_element as _extract_text_from_element
-from software.core.task import TaskContext
+from software.core.task import ExecutionState
 from software.network.browser import By, BrowserDriver, NoSuchElementException
 
 
@@ -139,7 +139,7 @@ def _click_submit_confirm_button(driver: BrowserDriver, settle_delay: float = 0.
 
 def submit(
     driver: BrowserDriver,
-    ctx: Optional[TaskContext] = None,
+    ctx: Optional[ExecutionState] = None,
     stop_signal: Optional[threading.Event] = None,
 ) -> None:
     headless_mode = _is_headless_mode(ctx)

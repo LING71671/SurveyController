@@ -12,7 +12,7 @@ from software.core.persona.generator import generate_persona, reset_persona, set
 from software.core.psychometrics import build_dimension_psychometric_plan
 from software.core.questions.config import GLOBAL_RELIABILITY_DIMENSION
 from software.core.questions.consistency import reset_consistency_context
-from software.core.task import TaskContext
+from software.core.task import ExecutionConfig
 from software.core.questions.tendency import reset_tendency
 
 _PSYCHO_BIAS_CHOICES = {"left", "center", "right"}
@@ -59,33 +59,33 @@ def _resolve_bias(raw_bias: Any, probability_config: Any, option_count: int) -> 
     return _infer_bias_from_probabilities(probability_config, option_count)
 
 
-def build_psychometric_plan_for_run(ctx: TaskContext) -> Optional[Any]:
+def build_psychometric_plan_for_run(config: ExecutionConfig) -> Optional[Any]:
     """根据当前任务配置构建本轮问卷的心理测量作答计划。"""
     grouped_items: Dict[str, List[Tuple[int, str, int, str, Optional[int]]]] = {}
 
-    for question_num in sorted(ctx.question_config_index_map.keys()):
-        config_entry = ctx.question_config_index_map.get(question_num)
+    for question_num in sorted(config.question_config_index_map.keys()):
+        config_entry = config.question_config_index_map.get(question_num)
         if not config_entry:
             continue
 
         question_type, start_index = config_entry
-        dimension = str(ctx.question_dimension_map.get(question_num) or "").strip()
+        dimension = str(config.question_dimension_map.get(question_num) or "").strip()
         if not dimension:
             continue
 
-        question_meta = ctx.questions_metadata.get(question_num) or {}
+        question_meta = config.questions_metadata.get(question_num) or {}
         meta_option_count = int(question_meta.get("options") or 0)
-        saved_bias = ctx.question_psycho_bias_map.get(question_num, "custom")
+        saved_bias = config.question_psycho_bias_map.get(question_num, "custom")
 
         if question_type in ("scale", "score"):
-            probability_config = ctx.scale_prob[start_index] if start_index < len(ctx.scale_prob) else -1
+            probability_config = config.scale_prob[start_index] if start_index < len(config.scale_prob) else -1
             option_count = _resolve_option_count(probability_config, meta_option_count, default_value=5)
             bias = _resolve_bias(saved_bias, probability_config, option_count)
             grouped_items.setdefault(dimension, []).append((question_num, question_type, option_count, bias, None))
             continue
 
         if question_type == "dropdown":
-            probability_config = ctx.droplist_prob[start_index] if start_index < len(ctx.droplist_prob) else -1
+            probability_config = config.droplist_prob[start_index] if start_index < len(config.droplist_prob) else -1
             option_count = _resolve_option_count(
                 probability_config,
                 meta_option_count,
@@ -102,7 +102,7 @@ def build_psychometric_plan_for_run(ctx: TaskContext) -> Optional[Any]:
 
             for row_idx in range(row_count):
                 matrix_prob_idx = start_index + row_idx
-                probability_config = ctx.matrix_prob[matrix_prob_idx] if matrix_prob_idx < len(ctx.matrix_prob) else -1
+                probability_config = config.matrix_prob[matrix_prob_idx] if matrix_prob_idx < len(config.matrix_prob) else -1
                 option_count = _resolve_option_count(
                     probability_config,
                     meta_option_count,
@@ -116,7 +116,7 @@ def build_psychometric_plan_for_run(ctx: TaskContext) -> Optional[Any]:
         return None
 
     try:
-        target_alpha = float(getattr(ctx, "psycho_target_alpha", 0.9) or 0.9)
+        target_alpha = float(getattr(config, "psycho_target_alpha", 0.9) or 0.9)
     except Exception:
         target_alpha = 0.9
     target_alpha = max(0.70, min(0.95, target_alpha))
@@ -128,17 +128,17 @@ def build_psychometric_plan_for_run(ctx: TaskContext) -> Optional[Any]:
 
 
 @contextmanager
-def provider_run_context(ctx: TaskContext, *, psycho_plan: Optional[Any] = None) -> Iterator[Optional[Any]]:
+def provider_run_context(config: ExecutionConfig, *, psycho_plan: Optional[Any] = None) -> Iterator[Optional[Any]]:
     """在 provider 运行前统一初始化画像、上下文与心理测量计划。"""
     persona = generate_persona()
     set_current_persona(persona)
     _reset_answer_context()
     reset_tendency()
-    reset_consistency_context(ctx.answer_rules, list((ctx.questions_metadata or {}).values()))
+    reset_consistency_context(config.answer_rules, list((config.questions_metadata or {}).values()))
 
     resolved_plan = psycho_plan
     if resolved_plan is None:
-        resolved_plan = build_psychometric_plan_for_run(ctx)
+        resolved_plan = build_psychometric_plan_for_run(config)
     if resolved_plan is not None:
         dimension_count = len(getattr(resolved_plan, "plans", {}) or {})
         plan_names = list((getattr(resolved_plan, "plans", {}) or {}).keys())
@@ -150,7 +150,7 @@ def provider_run_context(ctx: TaskContext, *, psycho_plan: Optional[Any] = None)
             "本轮启用心理测量计划：维度数=%d，题目数=%d，目标α=%.2f，维度=%s",
             dimension_count,
             len(getattr(resolved_plan, "items", []) or []),
-            float(getattr(ctx, "psycho_target_alpha", 0.9) or 0.9),
+            float(getattr(config, "psycho_target_alpha", 0.9) or 0.9),
             dimension_summary,
         )
 

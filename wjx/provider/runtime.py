@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from software.core.task import TaskContext
+from software.core.task import ExecutionConfig, ExecutionState
 from software.core.engine.dom_helpers import (
     _count_choice_inputs_driver,
     _driver_question_looks_like_description,
@@ -134,7 +134,7 @@ class _QuestionDispatcher:
 
     # -- 各题型处理器 --------------------------------------------------
 
-    def _handle_single(self, driver, q_num, idx, ctx: TaskContext):
+    def _handle_single(self, driver, q_num, idx, ctx: ExecutionState):
         _single_impl(
             driver,
             q_num,
@@ -145,10 +145,10 @@ class _QuestionDispatcher:
             task_ctx=ctx,
         )
 
-    def _handle_multiple(self, driver, q_num, idx, ctx: TaskContext):
+    def _handle_multiple(self, driver, q_num, idx, ctx: ExecutionState):
         _multiple_impl(driver, q_num, idx, ctx.multiple_prob, ctx.multiple_option_fill_texts, task_ctx=ctx)
 
-    def _handle_scale(self, driver, q_num, idx, ctx: TaskContext, question_div=None, psycho_plan=None):
+    def _handle_scale(self, driver, q_num, idx, ctx: ExecutionState, question_div=None, psycho_plan=None):
         dim = ctx.question_dimension_map.get(q_num)
         if question_div is not None and _driver_question_looks_like_rating(question_div):
             _score_impl(
@@ -173,7 +173,7 @@ class _QuestionDispatcher:
                 task_ctx=ctx,
             )
 
-    def _handle_matrix(self, driver, q_num, idx, ctx: TaskContext, psycho_plan=None):
+    def _handle_matrix(self, driver, q_num, idx, ctx: ExecutionState, psycho_plan=None):
         dim = ctx.question_dimension_map.get(q_num)
         return _matrix_impl(
             driver,
@@ -186,7 +186,7 @@ class _QuestionDispatcher:
             task_ctx=ctx,
         )
 
-    def _handle_dropdown(self, driver, q_num, idx, ctx: TaskContext, psycho_plan=None):
+    def _handle_dropdown(self, driver, q_num, idx, ctx: ExecutionState, psycho_plan=None):
         _dropdown_impl(
             driver,
             q_num,
@@ -199,7 +199,7 @@ class _QuestionDispatcher:
             task_ctx=ctx,
         )
 
-    def _handle_slider(self, driver, q_num, idx, ctx: TaskContext):
+    def _handle_slider(self, driver, q_num, idx, ctx: ExecutionState):
         slider_score = _resolve_slider_score(idx, ctx.slider_targets)
         _slider_impl(driver, q_num, slider_score)
 
@@ -211,7 +211,7 @@ class _QuestionDispatcher:
         question_div,
         config_entry: Optional[Tuple[str, int]],
         indices: Dict[str, int],
-        ctx: TaskContext,
+        ctx: ExecutionState,
         psycho_plan: Optional[Any] = None,
     ) -> Optional[bool]:
         """分发题型并填写。"""
@@ -362,7 +362,7 @@ def register_question_handler(
 
 def brush(
     driver: BrowserDriver,
-    ctx: TaskContext,
+    ctx: ExecutionState,
     stop_signal: Optional[threading.Event] = None,
     *,
     thread_name: Optional[str] = None,
@@ -606,12 +606,14 @@ def brush(
 
 def brush_wjx(
     driver: BrowserDriver,
-    ctx: TaskContext,
+    config: ExecutionConfig,
+    ctx: ExecutionState,
     *,
     stop_signal: Optional[threading.Event],
     thread_name: str,
     psycho_plan: Optional[Any],
 ) -> bool:
+    del config
     return brush(
         driver,
         ctx,
@@ -623,13 +625,13 @@ def brush_wjx(
 
 def fill_survey(
     driver: BrowserDriver,
-    ctx: TaskContext,
+    ctx: ExecutionState,
     *,
     stop_signal: Optional[threading.Event],
     thread_name: str,
     psycho_plan: Optional[Any],
 ) -> bool:
-    return brush_wjx(
+    return brush(
         driver,
         ctx,
         stop_signal=stop_signal,

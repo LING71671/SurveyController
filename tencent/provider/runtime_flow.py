@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from software.core.task import TaskContext
+from software.core.task import ExecutionState
 from software.network.browser import BrowserDriver
 
 QQ_COMPLETION_MARKERS = (
@@ -131,7 +131,7 @@ def qq_is_completion_page(driver: BrowserDriver) -> bool:
     except Exception:
         return False
 
-def _group_questions_by_page(ctx: TaskContext) -> List[List[Dict[str, Any]]]:
+def _group_questions_by_page(ctx: ExecutionState) -> List[List[Dict[str, Any]]]:
     grouped: Dict[int, List[Dict[str, Any]]] = {}
     for question_num in sorted(ctx.questions_metadata.keys()):
         item = dict(ctx.questions_metadata.get(question_num) or {})

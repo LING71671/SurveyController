@@ -1,21 +1,14 @@
-"""任务上下文 - 单次提交任务的完整配置与运行时状态。
+"""任务模型 - 静态执行配置与运行态状态。"""
 
-替代散落在 state.py 中的模块级全局变量，每次 start_run() 时
-由 RunController 构造一个新实例，并作为参数透传给引擎和辅助模块，
-彻底消除全局状态带来的线程安全盲区与单例限制。
-"""
 from __future__ import annotations
 
 import time
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Tuple, Union
 
 from software.core.questions.reliability_mode import DEFAULT_RELIABILITY_PRIORITY_MODE
 
-# ---------------------------------------------------------------------------
-# 答题内容配置（由 configure_probabilities 写入）
-# ---------------------------------------------------------------------------
 
 @dataclass
 class ThreadProgressState:
@@ -44,21 +37,13 @@ class ProxyLease:
 
 
 @dataclass
-class TaskContext:
-    """一次刷问卷任务的完整上下文。
+class ExecutionConfig:
+    """一次任务在启动前固定下来的静态执行配置。"""
 
-    分为两大部分：
-    - 静态配置：任务开始前由 RunController._prepare_engine_state 一次性写入。
-    - 运行时状态：引擎运行期间动态更新（cur_num / cur_fail 等），
-                  通过 lock 保护并发访问。
-    """
-
-    # ── 问卷基本信息 ──────────────────────────────────────────────────────
     url: str = ""
     survey_title: str = ""
     survey_provider: str = "wjx"
 
-    # ── 答题内容概率配置（由 configure_probabilities 写入） ───────────────
     single_prob: List[Union[List[float], int, float, None]] = field(default_factory=list)
     droplist_prob: List[Union[List[float], int, float, None]] = field(default_factory=list)
     multiple_prob: List[List[float]] = field(default_factory=list)
@@ -79,26 +64,15 @@ class TaskContext:
     multiple_option_fill_texts: List[Optional[List[Optional[str]]]] = field(default_factory=list)
     answer_rules: List[Dict[str, Any]] = field(default_factory=list)
 
-    # 题号 → (配置题型, 在对应类型概率列表中的起始索引)
     question_config_index_map: Dict[int, Tuple[str, int]] = field(default_factory=dict)
-
-    # 题号 → 运行时信度维度（None 表示不参与；整卷未分组时可回退到全局维度）
     question_dimension_map: Dict[int, Optional[str]] = field(default_factory=dict)
-
-    # 题号 → 是否为严格自定义比例题（手动配比绝对优先）
     question_strict_ratio_map: Dict[int, bool] = field(default_factory=dict)
-
-    # 题号 → 倾向预设（scale/score 为 str；matrix 为 List[str]，每行一个）
     question_psycho_bias_map: Dict[int, Any] = field(default_factory=dict)
-
-    # 题目元数据（从 HTML 解析得到）：题号 → 题目信息字典
     questions_metadata: Dict[int, Dict[str, Any]] = field(default_factory=dict)
 
-    # 心理测量计划目标 Alpha（0.70-0.95）
     psycho_target_alpha: float = 0.9
     reliability_priority_mode: str = DEFAULT_RELIABILITY_PRIORITY_MODE
 
-    # ── 并发 / 浏览器配置 ─────────────────────────────────────────────────
     headless_mode: bool = False
     browser_preference: List[str] = field(default_factory=list)
     num_threads: int = 1
@@ -106,15 +80,12 @@ class TaskContext:
     fail_threshold: int = 5
     stop_on_fail_enabled: bool = True
 
-    # ── 时间 / 节奏配置 ───────────────────────────────────────────────────
     submit_interval_range_seconds: Tuple[int, int] = (0, 0)
     answer_duration_range_seconds: Tuple[int, int] = (0, 0)
 
-    # ── 定时模式 ──────────────────────────────────────────────────────────
     timed_mode_enabled: bool = False
-    timed_mode_refresh_interval: float = 0.5  # DEFAULT_REFRESH_INTERVAL
+    timed_mode_refresh_interval: float = 0.5
 
-    # ── 代理 / UA 配置 ────────────────────────────────────────────────────
     random_proxy_ip_enabled: bool = False
     proxy_ip_pool: List[ProxyLease] = field(default_factory=list)
     random_user_agent_enabled: bool = False
@@ -122,22 +93,27 @@ class TaskContext:
         default_factory=lambda: {"wechat": 33, "mobile": 33, "pc": 34}
     )
     pause_on_aliyun_captcha: bool = True
-    proxy_waiting_threads: int = 0
-    proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
 
-    # ── 运行时计数（引擎动态更新，需加锁！） ─────────────────────────────
+
+@dataclass
+class ExecutionState:
+    """一次任务运行中的动态状态。"""
+
+    config: ExecutionConfig = field(default_factory=ExecutionConfig)
+
     cur_num: int = 0
-    cur_fail: int = 0  # 全线程共享的连续失败计数，成功提交后归零
+    cur_fail: int = 0
     device_quota_fail_count: int = 0
     thread_progress: Dict[str, ThreadProgressState] = field(default_factory=dict)
     distribution_runtime_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]] = field(default_factory=dict)
 
-    # ── 停止控制 ──────────────────────────────────────────────────────────
+    proxy_waiting_threads: int = 0
+    proxy_in_use_by_thread: Dict[str, ProxyLease] = field(default_factory=dict)
+
     stop_event: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
-    # ── 验证码相关标志 ────────────────────────────────────────────────────
     _aliyun_captcha_stop_triggered: bool = False
     _aliyun_captcha_stop_lock: threading.Lock = field(default_factory=threading.Lock)
     _aliyun_captcha_popup_shown: bool = False
@@ -145,20 +121,32 @@ class TaskContext:
     _target_reached_stop_lock: threading.Lock = field(default_factory=threading.Lock)
 
     _proxy_fetch_lock: threading.Lock = field(default_factory=threading.Lock)
-
-    # ── 浏览器信号量（私有，通过 get_browser_semaphore 访问） ────────────
     _browser_semaphore: Optional[threading.Semaphore] = field(default=None, repr=False)
     _browser_semaphore_lock: threading.Lock = field(default_factory=threading.Lock)
     _browser_semaphore_max_instances: int = 0
 
+    def __getattr__(self, name: str) -> Any:
+        """只读透传静态配置，避免旧的内部消费者到处改一轮。"""
+        config = object.__getattribute__(self, "config")
+        if hasattr(config, name):
+            return getattr(config, name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """旧路径写入配置字段时，继续落到 ExecutionConfig，避免在运行态对象上制造同名脏属性。"""
+        if name in _EXECUTION_STATE_FIELD_NAMES:
+            object.__setattr__(self, name, value)
+            return
+        config = self.__dict__.get("config")
+        if name in _EXECUTION_CONFIG_FIELD_NAMES and isinstance(config, ExecutionConfig):
+            setattr(config, name, value)
+            return
+        object.__setattr__(self, name, value)
+
     def get_browser_semaphore(self, max_instances: int) -> threading.Semaphore:
-        """获取或创建浏览器实例信号量，限制同时运行的浏览器数量。"""
         normalized = max(1, int(max_instances or 1))
         with self._browser_semaphore_lock:
-            if (
-                self._browser_semaphore is None
-                or self._browser_semaphore_max_instances != normalized
-            ):
+            if self._browser_semaphore is None or self._browser_semaphore_max_instances != normalized:
                 self._browser_semaphore = threading.Semaphore(normalized)
                 self._browser_semaphore_max_instances = normalized
             return self._browser_semaphore
@@ -211,7 +199,6 @@ class TaskContext:
         return state
 
     def ensure_worker_threads(self, expected_count: int) -> None:
-        """预创建 Worker-1..N 的进度行，便于 UI 提前渲染。"""
         count = max(1, int(expected_count or 1))
         now = time.time()
         with self.lock:
@@ -288,14 +275,14 @@ class TaskContext:
         if total > 0:
             current = min(current, total)
         with self.lock:
-            state = self._get_or_create_thread_state_locked(thread_name)
-            state.step_current = current
-            state.step_total = total
+            thread_state = self._get_or_create_thread_state_locked(thread_name)
+            thread_state.step_current = current
+            thread_state.step_total = total
             if status_text is not None:
-                state.status_text = str(status_text or "")
+                thread_state.status_text = str(status_text or "")
             if running is not None:
-                state.running = bool(running)
-            state.last_update_ts = now
+                thread_state.running = bool(running)
+            thread_state.last_update_ts = now
 
     def increment_thread_success(self, thread_name: str, *, status_text: str = "提交成功") -> None:
         now = time.time()
@@ -396,7 +383,6 @@ class TaskContext:
         return committed
 
     def snapshot_thread_progress(self) -> List[Dict[str, Any]]:
-        """返回线程进度快照（用于 UI 刷新，已排序）。"""
         with self.lock:
             rows = []
             for state in self.thread_progress.values():
@@ -433,3 +419,112 @@ class TaskContext:
             )
         )
         return rows
+
+
+_EXECUTION_CONFIG_FIELD_NAMES = frozenset(ExecutionConfig.__dataclass_fields__.keys())
+_EXECUTION_STATE_FIELD_NAMES = frozenset(ExecutionState.__dataclass_fields__.keys())
+
+
+if TYPE_CHECKING:
+    class TaskContext(Protocol):
+        """旧类型名的静态过渡协议，兼容仍按旧心智混用配置态与运行态的调用方。"""
+
+        config: ExecutionConfig
+
+        url: str
+        survey_title: str
+        survey_provider: str
+        single_prob: List[Union[List[float], int, float, None]]
+        droplist_prob: List[Union[List[float], int, float, None]]
+        multiple_prob: List[List[float]]
+        matrix_prob: List[Union[List[float], int, float, None]]
+        scale_prob: List[Union[List[float], int, float, None]]
+        slider_targets: List[float]
+        texts: List[List[str]]
+        texts_prob: List[List[float]]
+        text_entry_types: List[str]
+        text_ai_flags: List[bool]
+        text_titles: List[str]
+        multi_text_blank_modes: List[List[str]]
+        multi_text_blank_ai_flags: List[List[bool]]
+        multi_text_blank_int_ranges: List[List[List[int]]]
+        single_option_fill_texts: List[Optional[List[Optional[str]]]]
+        single_attached_option_selects: List[List[Dict[str, Any]]]
+        droplist_option_fill_texts: List[Optional[List[Optional[str]]]]
+        multiple_option_fill_texts: List[Optional[List[Optional[str]]]]
+        answer_rules: List[Dict[str, Any]]
+        question_config_index_map: Dict[int, Tuple[str, int]]
+        question_dimension_map: Dict[int, Optional[str]]
+        question_strict_ratio_map: Dict[int, bool]
+        question_psycho_bias_map: Dict[int, Any]
+        questions_metadata: Dict[int, Dict[str, Any]]
+        psycho_target_alpha: float
+        reliability_priority_mode: str
+        headless_mode: bool
+        browser_preference: List[str]
+        num_threads: int
+        target_num: int
+        fail_threshold: int
+        stop_on_fail_enabled: bool
+        submit_interval_range_seconds: Tuple[int, int]
+        answer_duration_range_seconds: Tuple[int, int]
+        timed_mode_enabled: bool
+        timed_mode_refresh_interval: float
+        random_proxy_ip_enabled: bool
+        proxy_ip_pool: List[ProxyLease]
+        random_user_agent_enabled: bool
+        user_agent_ratios: Dict[str, int]
+        pause_on_aliyun_captcha: bool
+
+        cur_num: int
+        cur_fail: int
+        device_quota_fail_count: int
+        thread_progress: Dict[str, ThreadProgressState]
+        distribution_runtime_stats: Dict[str, Dict[str, Any]]
+        distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]]
+        proxy_waiting_threads: int
+        proxy_in_use_by_thread: Dict[str, ProxyLease]
+        stop_event: threading.Event
+        lock: threading.Lock
+        _aliyun_captcha_stop_triggered: bool
+        _aliyun_captcha_stop_lock: threading.Lock
+        _aliyun_captcha_popup_shown: bool
+        _target_reached_stop_triggered: bool
+        _target_reached_stop_lock: threading.Lock
+        _proxy_fetch_lock: threading.Lock
+
+        def get_browser_semaphore(self, max_instances: int) -> threading.Semaphore: ...
+        def ensure_worker_threads(self, expected_count: int) -> None: ...
+        def register_proxy_waiter(self) -> None: ...
+        def unregister_proxy_waiter(self) -> None: ...
+        def get_proxy_waiter_count(self) -> int: ...
+        def mark_proxy_in_use(self, thread_name: str, lease: ProxyLease) -> None: ...
+        def release_proxy_in_use(self, thread_name: str) -> Optional[ProxyLease]: ...
+        def get_proxy_in_use_count(self) -> int: ...
+        def update_thread_status(self, thread_name: str, status_text: str, *, running: Optional[bool] = None) -> None: ...
+        def update_thread_step(
+            self,
+            thread_name: str,
+            step_current: int,
+            step_total: int,
+            *,
+            status_text: Optional[str] = None,
+            running: Optional[bool] = None,
+        ) -> None: ...
+        def increment_thread_success(self, thread_name: str, *, status_text: str = "提交成功") -> None: ...
+        def increment_thread_fail(self, thread_name: str, *, status_text: str = "失败重试") -> None: ...
+        def mark_thread_finished(self, thread_name: str, *, status_text: str = "已停止") -> None: ...
+        def snapshot_distribution_stats(self, stat_key: str, option_count: int) -> Tuple[int, List[int]]: ...
+        def reset_pending_distribution(self, thread_name: Optional[str] = None) -> None: ...
+        def append_pending_distribution_choice(
+            self,
+            stat_key: str,
+            option_index: int,
+            option_count: int,
+            thread_name: Optional[str] = None,
+        ) -> None: ...
+        def commit_pending_distribution(self, thread_name: Optional[str] = None) -> int: ...
+        def snapshot_thread_progress(self) -> List[Dict[str, Any]]: ...
+else:
+    # 运行时继续导出 ExecutionState，保证旧 import 不崩；静态检查期则使用上面的协议补足过渡字段。
+    TaskContext = ExecutionState

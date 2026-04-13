@@ -4,12 +4,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QWidget
 from qfluentwidgets import (
     BodyLabel,
     LineEdit,
     MessageBoxBase,
-    PrimaryPushButton,
     PushButton,
     TableWidget,
     TitleLabel,
@@ -116,7 +115,9 @@ class QuestionSelectorDialog(MessageBoxBase):
             self.table.setItem(row_index, 3, QTableWidgetItem(group_name))
 
             # 存储原始索引
-            self.table.item(row_index, 0).setData(Qt.ItemDataRole.UserRole, question.get("entry_index", -1))
+            item = self.table.item(row_index, 0)
+            if item is not None:
+                item.setData(Qt.ItemDataRole.UserRole, question.get("entry_index", -1))
 
     def _on_search(self, text: str) -> None:
         """搜索过滤。"""

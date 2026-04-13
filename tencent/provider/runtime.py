@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 from software.app.config import HEADLESS_PAGE_BUFFER_DELAY, HEADLESS_PAGE_CLICK_DELAY
 from software.core.modes.duration_control import simulate_answer_duration_delay
-from software.core.task import TaskContext
+from software.core.task import ExecutionConfig, ExecutionState
 from software.network.browser import BrowserDriver, NoSuchElementException
 
 from software.core.engine.navigation import _human_scroll_after_question
@@ -45,12 +45,14 @@ __all__ = [
 
 def brush_qq(
     driver: BrowserDriver,
-    ctx: TaskContext,
+    config: ExecutionConfig,
+    ctx: ExecutionState,
     *,
     stop_signal: Optional[threading.Event],
     thread_name: str,
     psycho_plan: Optional[Any],
 ) -> bool:
+    del config
     unsupported = [item for item in list((ctx.questions_metadata or {}).values()) if bool(item.get("unsupported"))]
     if unsupported:
         raise RuntimeError("当前腾讯问卷仍包含未支持题型，已阻止启动")
