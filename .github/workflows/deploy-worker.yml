@@ -5,12 +5,15 @@ on:
     branches:
       - main
     paths:
-      - "worker/**"
+      - "CI/worker/**"
       - ".github/workflows/deploy-worker.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   deploy:
@@ -18,11 +21,11 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Deploy worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --config worker/wrangler.toml
+          command: deploy --config CI/worker/wrangler.toml
