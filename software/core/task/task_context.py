@@ -7,9 +7,6 @@ import threading
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Tuple, Union
 
-from software.core.questions.reliability_mode import DEFAULT_RELIABILITY_PRIORITY_MODE
-
-
 @dataclass
 class ThreadProgressState:
     """单个工作线程的运行状态快照。"""
@@ -71,7 +68,6 @@ class ExecutionConfig:
     questions_metadata: Dict[int, Dict[str, Any]] = field(default_factory=dict)
 
     psycho_target_alpha: float = 0.9
-    reliability_priority_mode: str = DEFAULT_RELIABILITY_PRIORITY_MODE
 
     headless_mode: bool = False
     browser_preference: List[str] = field(default_factory=list)
@@ -459,7 +455,6 @@ if TYPE_CHECKING:
         question_psycho_bias_map: Dict[int, Any]
         questions_metadata: Dict[int, Dict[str, Any]]
         psycho_target_alpha: float
-        reliability_priority_mode: str
         headless_mode: bool
         browser_preference: List[str]
         num_threads: int

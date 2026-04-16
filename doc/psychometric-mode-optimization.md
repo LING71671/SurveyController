@@ -1,5 +1,7 @@
 # 心理测量模式优化分析报告
 
+> 更新说明（2026-04-16）：`reliability_priority_mode` 已从产品和运行时配置中删除，系统现固定使用单一信效度策略。本文中关于 `reliability_first`、`balanced`、`ratio_first` 三种模式的对比分析仅保留为历史背景，不再代表当前实现。
+
 ## 修改概述
 
 在 `software/core/questions/tendency.py` 的 `get_tendency_index` 函数中，针对 `reliability_first` 模式下的心理测量计划答案处理逻辑进行了优化。
