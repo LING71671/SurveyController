@@ -19,6 +19,7 @@ function jsonResponse(data, status = 200) {
 async function parseIncomingRequest(request) {
   const contentType = request.headers.get("Content-Type") || "";
   let message = "";
+  let userId = "";
   const files = [];
 
   if (contentType.includes("multipart/form-data") || contentType.includes("form-data")) {
@@ -27,6 +28,10 @@ async function parseIncomingRequest(request) {
     if (typeof maybeMessage === "string") {
       message = maybeMessage;
     }
+    const maybeUserId = form.get("userId") ?? form.get("user_id");
+    if (typeof maybeUserId === "string") {
+      userId = maybeUserId.trim();
+    }
 
     for (const [, value] of form.entries()) {
       if (value instanceof File) {
@@ -34,7 +39,7 @@ async function parseIncomingRequest(request) {
       }
     }
 
-    return { message, files };
+    return { message, files, userId };
   }
 
   if (contentType.includes("application/json")) {
@@ -42,14 +47,19 @@ async function parseIncomingRequest(request) {
     if (typeof body?.message === "string") {
       message = body.message;
     }
-    return { message, files };
+    if (typeof body?.userId === "string") {
+      userId = body.userId.trim();
+    } else if (typeof body?.user_id === "string") {
+      userId = body.user_id.trim();
+    }
+    return { message, files, userId };
   }
 
   const text = await request.text();
   if (text) {
     message = text;
   }
-  return { message, files };
+  return { message, files, userId };
 }
 
 function validatePayload(message, files) {
@@ -87,15 +97,18 @@ async function sendTelegramRequest(apiBase, endpoint, init) {
     const description = payload?.description || `telegram_request_failed_${response.status}`;
     throw new Error(description);
   }
+
+  return payload.result;
 }
 
-async function sendMessage(apiBase, chatId, text) {
+async function sendMessage(apiBase, chatId, text, options = {}) {
   await sendTelegramRequest(apiBase, "sendMessage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      ...options,
     }),
   });
 }
@@ -168,6 +181,117 @@ async function sendHomogeneousFiles(apiBase, chatId, fileList, caption) {
   await sendMediaGroup(apiBase, chatId, fileList, caption);
 }
 
+function buildTaskCallbackData(userId) {
+  return `done:${userId}`;
+}
+
+function buildTaskCardText(userId) {
+  return [
+    "待处理工单",
+    `工单用户ID：${userId}`,
+    "点击下方按钮后，群里会追加一条已处理通知。",
+  ].join("\n");
+}
+
+async function sendTaskCard(apiBase, chatId, userId) {
+  await sendMessage(apiBase, chatId, buildTaskCardText(userId), {
+    reply_markup: {
+      inline_keyboard: [[{ text: "已处理", callback_data: buildTaskCallbackData(userId) }]],
+    },
+  });
+}
+
+function escapeMarkdownV2(value) {
+  return String(value).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
+function parseTaskCallbackData(data) {
+  if (typeof data !== "string" || !data.startsWith("done:")) {
+    return null;
+  }
+
+  const userId = data.slice(5).trim();
+  if (!userId) {
+    return null;
+  }
+
+  return { userId };
+}
+
+async function answerCallbackQuery(apiBase, callbackQueryId, text) {
+  await sendTelegramRequest(apiBase, "answerCallbackQuery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: callbackQueryId,
+      text,
+    }),
+  });
+}
+
+function getActorDisplayName(from) {
+  if (!from || typeof from !== "object") {
+    return "未知用户";
+  }
+
+  const fullName = [from.first_name, from.last_name].filter(Boolean).join(" ").trim();
+  if (fullName) {
+    return fullName;
+  }
+  if (typeof from.username === "string" && from.username.trim()) {
+    return from.username.trim();
+  }
+  return String(from.id || "未知用户");
+}
+
+async function handleCallbackQuery(apiBase, callbackQuery) {
+  const parsed = parseTaskCallbackData(callbackQuery?.data);
+  if (!parsed) {
+    return jsonResponse({ error: "unsupported_callback_query" }, 400);
+  }
+
+  const callbackQueryId = callbackQuery?.id;
+  const chatId = callbackQuery?.message?.chat?.id;
+  const actorId = callbackQuery?.from?.id;
+  if (!callbackQueryId || chatId === undefined || actorId === undefined) {
+    return jsonResponse({ error: "invalid_callback_query_payload" }, 400);
+  }
+
+  await answerCallbackQuery(apiBase, callbackQueryId, "已记录处理结果");
+
+  const actorName = escapeMarkdownV2(getActorDisplayName(callbackQuery.from));
+  const actorMention = `[${actorName}](tg://user?id=${actorId})`;
+  const escapedUserId = escapeMarkdownV2(parsed.userId);
+  await sendMessage(
+    apiBase,
+    chatId,
+    `该工单已处理\n处理人：${actorMention}\n工单用户ID：${escapedUserId}`,
+    {
+      parse_mode: "MarkdownV2",
+    },
+  );
+
+  return jsonResponse({ status: "ok" });
+}
+
+async function parseTelegramUpdate(request) {
+  const contentType = request.headers.get("Content-Type") || "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+
+  try {
+    const body = await request.clone().json();
+    if (body?.callback_query) {
+      return body;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -185,17 +309,25 @@ export default {
     }
 
     try {
-      const { message, files } = await parseIncomingRequest(request);
+      const apiBase = `https://api.telegram.org/bot${botToken}`;
+      const telegramUpdate = await parseTelegramUpdate(request);
+      if (telegramUpdate?.callback_query) {
+        return handleCallbackQuery(apiBase, telegramUpdate.callback_query);
+      }
+
+      const { message, files, userId } = await parseIncomingRequest(request);
       const validation = validatePayload(message, files);
       if (!validation.ok) {
         return validation.response;
       }
 
-      const apiBase = `https://api.telegram.org/bot${botToken}`;
       const { images, documents } = splitFilesByType(files);
 
       if (files.length === 0) {
         await sendMessage(apiBase, chatId, message);
+        if (userId) {
+          await sendTaskCard(apiBase, chatId, userId);
+        }
         return jsonResponse({ status: "ok" });
       }
 
@@ -205,10 +337,16 @@ export default {
         }
         await sendHomogeneousFiles(apiBase, chatId, images);
         await sendHomogeneousFiles(apiBase, chatId, documents);
+        if (userId) {
+          await sendTaskCard(apiBase, chatId, userId);
+        }
         return jsonResponse({ status: "ok" });
       }
 
       await sendHomogeneousFiles(apiBase, chatId, files, message || undefined);
+      if (userId) {
+        await sendTaskCard(apiBase, chatId, userId);
+      }
       return jsonResponse({ status: "ok" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "internal_error";

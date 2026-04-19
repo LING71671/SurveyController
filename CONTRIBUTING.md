@@ -40,10 +40,7 @@
 ├── rthook_pyside6.py     # PySide6 打包钩子
 ├── CI/                   # CI 与自动化辅助目录
 │   ├── test_imports.py   # 导入检测脚本
-│   ├── test_contact_feedback_report.py # 报错反馈表单自动附件最小回归脚本
-│   ├── test_contact_worker.mjs # 联系开发者 Worker 转发最小回归脚本
-│   ├── test_joint_psychometric_plan.py # 联合信效度配额计划最小回归脚本
-│   └── worker/           # Cloudflare Worker 相关配置，用于发送联系开发者消息
+│   └── worker/           # Cloudflare Worker 相关配置；worker.js 负责联系开发者消息与 Telegram 回调
 ├── software/             # 软件主包（应用壳 + 共享核心 + 平台总调度）
 ├── tencent/              # 腾讯问卷主包
 └── wjx/                  # 问卷星主包
