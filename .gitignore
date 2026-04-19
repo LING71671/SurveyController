@@ -24,3 +24,8 @@ __pycache__/
 /worker/.dev.vars
 /worker/.env
 /worker/.wrangler/
+
+.kiro
+docx
+tests
+scripts
