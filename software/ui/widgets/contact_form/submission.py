@@ -52,7 +52,7 @@ def build_contact_message(
                 f"申请额度：{request_quota_text}",
                 f"紧急程度：{request_urgency_text or '中'}",
                 "",
-                f"补充说明：{message or '未填写'}",
+                f"\n补充说明：{message or '未填写'}",
             ]
         )
     else:

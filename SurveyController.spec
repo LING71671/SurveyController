@@ -183,7 +183,9 @@ a = Analysis(
         "PySide6.QtMultimediaWidgets",
     ],
     noarchive=True,
-    optimize=2,
+    # numpy 在冻结环境里导入时会读取部分 Python 层 docstring；
+    # optimize=2 会把 docstring 剥掉，直接导致启动期崩溃。
+    optimize=1,
 )
 
 # === 在 Analysis 之后强制过滤掉不需要的 PySide6 DLL ===

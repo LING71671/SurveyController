@@ -7,6 +7,7 @@ from dataclasses import asdict
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.core.config.schema import RuntimeConfig
+from software.core.psychometrics.psychometric import normalize_target_alpha
 from software.core.questions.consistency import normalize_rule_dict, sanitize_answer_rules
 from software.core.questions.utils import serialize_random_int_range
 from software.network.proxy import normalize_random_ip_enabled_value
@@ -342,8 +343,7 @@ def normalize_runtime_config_payload(raw: Dict[str, Any]) -> RuntimeConfig:
     config.fail_stop_enabled = bool(raw.get("fail_stop_enabled", True))
     config.pause_on_aliyun_captcha = bool(raw.get("pause_on_aliyun_captcha", True))
     config.reliability_mode_enabled = bool(raw.get("reliability_mode_enabled", True))
-    config.psycho_target_alpha = _as_float(raw.get("psycho_target_alpha") or 0.9, 0.9)
-    config.psycho_target_alpha = max(0.70, min(0.95, config.psycho_target_alpha))
+    config.psycho_target_alpha = normalize_target_alpha(raw.get("psycho_target_alpha"))
     config.headless_mode = _as_bool(raw.get("headless_mode", True), True)
     config.answer_rules = []
     config.dimension_groups = _normalize_dimension_groups(raw.get("dimension_groups"))

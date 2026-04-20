@@ -24,6 +24,7 @@ from software.core.questions.utils import (
     smooth_scroll_to_element,
 )
 from software.app.config import DEFAULT_FILL_TEXT
+from wjx.provider.html_parser_common import _is_select_placeholder_option
 
 
 def _looks_like_single_option(element: Any) -> bool:
@@ -226,7 +227,7 @@ def _extract_attached_select_options(target_elem: Any) -> Tuple[Optional[Any], L
                 text = (opt.text or "").strip()
             except Exception:
                 text = ""
-            if idx == 0 and ((value == "") or (value == "0") or ("请选择" in text)):
+            if _is_select_placeholder_option(idx, value, text):
                 continue
             if not text and not value:
                 continue

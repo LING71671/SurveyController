@@ -14,12 +14,33 @@ from software.logging.log_utils import log_suppressed_exception
 
 _TEXT_INPUT_ALLOWED_TYPES = {"text", "tel", "email", "number", "search", "url", "password"}
 _KNOWN_NON_TEXT_QUESTION_TYPES = {"3", "4", "5", "6", "7", "8", "11", "12", "13", "15", "16", "17"}
+_SELECT_PLACEHOLDER_PREFIXES = ("请选择", "请先选择")
 
 
 def _normalize_html_text(value: Optional[str]) -> str:
     if not value:
         return ""
     return _HTML_SPACE_RE.sub(" ", value).strip()
+
+
+def _text_looks_like_select_placeholder(value: Any) -> bool:
+    text = _normalize_html_text(str(value or ""))
+    if not text:
+        return False
+    compact_text = text.replace(" ", "")
+    return any(compact_text.startswith(prefix) for prefix in _SELECT_PLACEHOLDER_PREFIXES)
+
+
+def _is_select_placeholder_option(index: int, value: Any, text: Any) -> bool:
+    if index != 0:
+        return False
+    normalized_value = _normalize_html_text(str(value or ""))
+    normalized_text = _normalize_html_text(str(text or ""))
+    if not normalized_text:
+        return True
+    if normalized_value in {"", "0", "-1", "-2"}:
+        return True
+    return _text_looks_like_select_placeholder(normalized_text)
 
 def extract_survey_title_from_html(html: str) -> Optional[str]:
     """尝试从问卷 HTML 文本中提取标题。"""

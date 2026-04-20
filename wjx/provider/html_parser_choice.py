@@ -4,7 +4,11 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from software.logging.log_utils import log_suppressed_exception
-from .html_parser_common import _normalize_html_text
+from .html_parser_common import (
+    _is_select_placeholder_option,
+    _normalize_html_text,
+    _text_looks_like_select_placeholder,
+)
 
 _FORCE_SELECT_COMMAND_RE = re.compile(r"请(?:务必|一定|必须|直接)?\s*选(?:择)?")
 
@@ -345,7 +349,7 @@ def _extract_select_option_texts_from_element(select_element) -> List[str]:
     for idx, option in enumerate(option_elements):
         value = _normalize_html_text(option.get("value") or "")
         text = _normalize_html_text(option.get_text(" ", strip=True))
-        if idx == 0 and ((value == "") or (value == "0") or ("请选择" in text)):
+        if _is_select_placeholder_option(idx, value, text):
             continue
         if not text:
             continue
@@ -368,7 +372,7 @@ def _extract_custom_select_option_texts(element) -> List[str]:
     for raw in raw_values:
         for part in re.split(r"[,，\n\r|/]+", raw):
             text = _normalize_html_text(part)
-            if not text or text == "请选择":
+            if not text or _text_looks_like_select_placeholder(text):
                 continue
             options.append(text)
     deduped: List[str] = []
@@ -467,7 +471,7 @@ def _collect_select_option_texts(question_div, soup, question_number: int) -> Li
     for idx, option in enumerate(option_elements):
         value = (option.get("value") or "").strip()
         text = _normalize_html_text(option.get_text(" ", strip=True))
-        if idx == 0 and (value == "" or value == "0"):
+        if _is_select_placeholder_option(idx, value, text):
             continue
         if not text:
             continue

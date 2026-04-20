@@ -19,10 +19,9 @@ CLAUDE.md
 __pycache__/
 .pytest_cache/
 *.pyc
+%SystemDrive%/
 /configs/
 /logs/
 /worker/.dev.vars
 /worker/.env
 /worker/.wrangler/
-
-

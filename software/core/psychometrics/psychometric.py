@@ -10,11 +10,32 @@ from software.core.psychometrics.utils import randn, z_to_category
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TARGET_ALPHA = 0.9
+MIN_TARGET_ALPHA = 0.60
+MAX_TARGET_ALPHA = 0.95
+
 
 def _build_choice_key(question_index: int, row_index: Optional[int] = None) -> str:
     if row_index is not None:
         return f"q:{question_index}:row:{row_index}"
     return f"q:{question_index}"
+
+
+def normalize_target_alpha(value: Any, default: float = DEFAULT_TARGET_ALPHA) -> float:
+    """规范化目标 Alpha，统一处理默认值、NaN 和上下限。"""
+    try:
+        fallback = float(default)
+    except Exception:
+        fallback = DEFAULT_TARGET_ALPHA
+
+    try:
+        alpha = float(value)
+    except Exception:
+        alpha = fallback
+
+    if alpha != alpha:
+        alpha = fallback
+    return max(MIN_TARGET_ALPHA, min(MAX_TARGET_ALPHA, alpha))
 
 
 def compute_rho_from_alpha(alpha: float, k: int) -> float:
@@ -188,6 +209,8 @@ def build_psychometric_plan(
         logger.warning("心理测量计划需要至少2道题目，当前只有 %d 道", k)
         return None
     
+    target_alpha = normalize_target_alpha(target_alpha)
+
     # 计算误差标准差
     sigma_e = compute_sigma_e_from_alpha(target_alpha, k)
     
@@ -237,6 +260,8 @@ def build_dimension_psychometric_plan(
     """按维度分别构建心理测量计划。"""
     if not grouped_items:
         return None
+
+    target_alpha = normalize_target_alpha(target_alpha)
 
     plans: Dict[str, PsychometricPlan] = {}
     item_dimension_map: Dict[str, str] = {}

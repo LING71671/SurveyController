@@ -7,6 +7,7 @@ import threading
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from software.core.engine.runner import run
+from software.core.psychometrics.psychometric import normalize_target_alpha
 from software.core.task import ExecutionConfig, ExecutionState, ProxyLease
 from software.io.config import RuntimeConfig
 from software.network.proxy import get_effective_proxy_api_url, is_custom_proxy_api_active
@@ -69,10 +70,9 @@ class RunControllerInitializationMixin:
         fallback_title = str(getattr(self, "survey_title", "") or "")
         survey_title = config_title or fallback_title
         try:
-            psycho_target_alpha = float(getattr(config, "psycho_target_alpha", 0.9) or 0.9)
+            psycho_target_alpha = normalize_target_alpha(getattr(config, "psycho_target_alpha", None))
         except Exception:
-            psycho_target_alpha = 0.9
-        psycho_target_alpha = max(0.70, min(0.95, psycho_target_alpha))
+            psycho_target_alpha = normalize_target_alpha(None)
 
         execution_config = ExecutionConfig(
             url=config.url,

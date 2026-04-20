@@ -22,6 +22,12 @@ from qfluentwidgets import (
     SwitchButton,
     TransparentToolButton,
 )
+from software.core.psychometrics.psychometric import (
+    DEFAULT_TARGET_ALPHA,
+    MAX_TARGET_ALPHA,
+    MIN_TARGET_ALPHA,
+    normalize_target_alpha,
+)
 from software.ui.helpers.fluent_tooltip import install_tooltip_filter
 from software.ui.helpers.proxy_access import (
     apply_custom_proxy_api,
@@ -695,13 +701,15 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
 
         alpha_label = BodyLabel("目标 Cronbach's α 系数", self._groupContainer)
         self.alphaEdit = LineEdit(self._groupContainer)
-        self.alphaEdit.setPlaceholderText("0.70 - 0.95（默认 0.9）")
+        self.alphaEdit.setPlaceholderText(
+            f"{MIN_TARGET_ALPHA:.2f} - {MAX_TARGET_ALPHA:.2f}（默认 {DEFAULT_TARGET_ALPHA:g}）"
+        )
         self.alphaEdit.setFixedWidth(120)
         self.alphaEdit.setFixedHeight(36)
-        self.alphaEdit.setText("0.9")
+        self.alphaEdit.setText(f"{DEFAULT_TARGET_ALPHA:g}")
 
-        # 仅允许 0.70 - 0.95 的两位小数
-        validator = QDoubleValidator(0.70, 0.95, 2, self.alphaEdit)
+        # 仅允许 MIN_TARGET_ALPHA - MAX_TARGET_ALPHA 的两位小数
+        validator = QDoubleValidator(MIN_TARGET_ALPHA, MAX_TARGET_ALPHA, 2, self.alphaEdit)
         validator.setNotation(QDoubleValidator.Notation.StandardNotation)
         self.alphaEdit.setValidator(validator)
 
@@ -730,35 +738,19 @@ class ReliabilitySettingCard(ExpandGroupSettingCard):
         self.switchButton.setChecked(bool(checked))
 
     def get_alpha(self) -> float:
-        """读取并裁剪目标 Alpha 值，落在 0.70-0.95 之间。
+        """读取并裁剪目标 Alpha 值，落在允许范围内。
 
-        输入非法或为空时回退到 0.9。
+         输入非法或为空时回退到 0.9。
         """
-
-        text = (self.alphaEdit.text() or "").strip()
-        try:
-            value = float(text)
-        except Exception:
-            value = 0.9
-
-        if value != value:  # NaN 兜底
-            value = 0.9
-
-        value = max(0.70, min(0.95, value))
-        return value
+        return normalize_target_alpha((self.alphaEdit.text() or "").strip())
 
     def set_alpha(self, value: float) -> None:
         """设置目标 Alpha，并同步到输入框文本。"""
-
-        try:
-            num = float(value)
-        except Exception:
-            num = 0.9
-        num = max(0.70, min(0.95, num))
+        num = normalize_target_alpha(value)
         # 保留两位小数，去掉多余 0
         text = f"{num:.2f}".rstrip("0").rstrip(".")
         if not text:
-            text = "0.9"
+            text = f"{DEFAULT_TARGET_ALPHA:g}"
         if self.alphaEdit.text() != text:
             self.alphaEdit.setText(text)
 

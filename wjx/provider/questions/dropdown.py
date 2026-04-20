@@ -16,6 +16,7 @@ from software.core.questions.utils import (
     resolve_option_fill_text_from_config,
     fill_option_additional_text,
 )
+from wjx.provider.html_parser_common import _is_select_placeholder_option
 
 
 def _extract_select_options(driver: BrowserDriver, question_number: int) -> Tuple[Any, List[Tuple[str, str]]]:
@@ -38,7 +39,7 @@ def _extract_select_options(driver: BrowserDriver, question_number: int) -> Tupl
             text = (opt.text or "").strip()
         except Exception:
             text = ""
-        if idx == 0 and ((value == "") or (value == "0") or ("请选择" in text)):
+        if _is_select_placeholder_option(idx, value, text):
             continue
         if not text and not value:
             continue
@@ -134,7 +135,7 @@ def _fill_droplist_via_click(
             text = (opt.text or "").strip()
         except Exception:
             text = ""
-        if idx == 0 and (text == "" or "请选择" in text):
+        if _is_select_placeholder_option(idx, "", text):
             continue
         filtered_options.append((idx, opt, text))
     option_count = len(filtered_options)

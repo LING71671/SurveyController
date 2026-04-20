@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
 from PySide6.QtGui import QFont, QTextCursor
 from qfluentwidgets import (
     SubtitleLabel,
+    PrimaryPushButton,
     PushButton,
     InfoBar,
     InfoBarPosition,
@@ -71,7 +72,7 @@ class LogPage(QWidget):
         toolbar.setSpacing(8)
 
         self.save_btn = PushButton("导出到文件", self, FIF.SAVE)
-        self.feedback_btn = PushButton("报错反馈", self, FIF.HELP)
+        self.feedback_btn = PrimaryPushButton("报错反馈", self, FIF.HELP)
         self.feedback_btn.setToolTip("打开联系开发者，并直接选择“报错反馈”")
 
         toolbar.addWidget(self.save_btn)

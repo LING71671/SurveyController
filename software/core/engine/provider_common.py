@@ -15,6 +15,7 @@ from software.core.psychometrics import (
     build_joint_psychometric_answer_plan,
     build_psychometric_blueprint,
 )
+from software.core.psychometrics.psychometric import normalize_target_alpha
 from software.core.questions.config import GLOBAL_RELIABILITY_DIMENSION
 from software.core.questions.consistency import reset_consistency_context
 from software.core.task import ExecutionConfig, ExecutionState
@@ -43,10 +44,9 @@ def build_psychometric_plan_for_run(config: ExecutionConfig) -> Optional[Any]:
         return None
 
     try:
-        target_alpha = float(getattr(config, "psycho_target_alpha", 0.9) or 0.9)
+        target_alpha = normalize_target_alpha(getattr(config, "psycho_target_alpha", None))
     except Exception:
-        target_alpha = 0.9
-    target_alpha = max(0.70, min(0.95, target_alpha))
+        target_alpha = normalize_target_alpha(None)
 
     return build_dimension_psychometric_plan(
         grouped_items=grouped_items,

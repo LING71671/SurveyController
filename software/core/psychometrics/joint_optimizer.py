@@ -12,7 +12,11 @@ from software.core.psychometrics.orientation import (
     infer_dimension_orientation,
     normalize_probability_list,
 )
-from software.core.psychometrics.psychometric import PsychometricItem, compute_sigma_e_from_alpha
+from software.core.psychometrics.psychometric import (
+    PsychometricItem,
+    compute_sigma_e_from_alpha,
+    normalize_target_alpha,
+)
 from software.core.psychometrics.utils import cronbach_alpha, randn
 from software.core.questions.utils import normalize_droplist_probs
 
@@ -359,12 +363,53 @@ def _build_sigma_candidates(target_alpha: float, item_count: int) -> List[float]
     return normalized
 
 
+def _build_noise_matrix(item_count: int, sample_count: int) -> List[List[float]]:
+    return [[randn() for _ in range(sample_count)] for _ in range(item_count)]
+
+
+def _alpha_fit_key(alpha: float, target_alpha: float) -> tuple[float, int]:
+    if alpha != alpha:
+        return (float("inf"), 1)
+    return (abs(float(alpha) - float(target_alpha)), 0 if alpha <= target_alpha + 1e-6 else 1)
+
+
+def _build_refined_sigma_candidates(
+    evaluated_candidates: List[tuple[float, float]],
+    target_alpha: float,
+) -> List[float]:
+    if len(evaluated_candidates) < 2:
+        return []
+
+    ordered = sorted(evaluated_candidates, key=lambda item: item[0], reverse=True)
+    seen = {round(float(sigma), 6) for sigma, _ in ordered}
+    refined: List[float] = []
+    for index in range(len(ordered) - 1):
+        left_sigma, left_alpha = ordered[index]
+        right_sigma, right_alpha = ordered[index + 1]
+        if left_sigma <= right_sigma:
+            continue
+        if (left_alpha - target_alpha) * (right_alpha - target_alpha) > 0:
+            continue
+
+        step = (left_sigma - right_sigma) / 5.0
+        for split_index in range(1, 5):
+            sigma = round(left_sigma - (step * split_index), 6)
+            if sigma <= right_sigma or sigma in seen:
+                continue
+            seen.add(sigma)
+            refined.append(sigma)
+        break
+    return refined
+
+
 def _evaluate_dimension_plan(
     items: List[PsychometricBlueprintItem],
     sample_count: int,
     sigma_e: float,
     theta: List[float],
     reversed_keys: set[str],
+    standard_noise: List[List[float]],
+    micro_jitter_noise: List[List[float]],
 ) -> tuple[float, Dict[str, List[int]]]:
     choices_by_item: Dict[str, List[int]] = {}
     response_rows = [[0.0] * len(items) for _ in range(sample_count)]
@@ -374,7 +419,9 @@ def _evaluate_dimension_plan(
         quotas = _build_integer_quotas(item.target_probabilities, sample_count)
         sign = -1.0 if is_reversed else 1.0
         scores = [
-            sign * theta[sample_index] + (sigma_e * randn()) + (_MICRO_JITTER_SIGMA * randn())
+            sign * theta[sample_index]
+            + (sigma_e * standard_noise[item_index][sample_index])
+            + (_MICRO_JITTER_SIGMA * micro_jitter_noise[item_index][sample_index])
             for sample_index in range(sample_count)
         ]
         assigned = _assign_choices_from_scores(scores, quotas)
@@ -398,10 +445,9 @@ def build_joint_psychometric_answer_plan(config: "ExecutionConfig") -> Optional[
         return None
 
     try:
-        target_alpha = float(getattr(config, "psycho_target_alpha", 0.9) or 0.9)
+        target_alpha = normalize_target_alpha(getattr(config, "psycho_target_alpha", 0.9))
     except Exception:
-        target_alpha = 0.9
-    target_alpha = max(0.70, min(0.95, target_alpha))
+        target_alpha = normalize_target_alpha(None)
 
     answers_by_sample: Dict[int, Dict[str, int]] = {sample_index: {} for sample_index in range(sample_count)}
     diagnostics_by_dimension: Dict[str, JointPsychometricDimensionDiagnostic] = {}
@@ -428,16 +474,43 @@ def build_joint_psychometric_answer_plan(config: "ExecutionConfig") -> Optional[
             logger.info("维度[%s]题数不足 2，联合优化已跳过", normalized_dimension)
             continue
 
-        best_alpha = -1.0
-        best_choices_by_item: Dict[str, List[int]] = {}
         theta = [randn() for _ in range(sample_count)]
+        standard_noise = _build_noise_matrix(item_count, sample_count)
+        micro_jitter_noise = _build_noise_matrix(item_count, sample_count)
         dimension_orientation = infer_dimension_orientation(items)
         reversed_keys = set(dimension_orientation.reversed_keys)
+        evaluated_candidates: List[tuple[float, float, Dict[str, List[int]]]] = []
         for sigma_e in _build_sigma_candidates(target_alpha, item_count):
-            current_alpha, current_choices = _evaluate_dimension_plan(items, sample_count, sigma_e, theta, reversed_keys)
-            if current_alpha > best_alpha:
-                best_alpha = current_alpha
-                best_choices_by_item = current_choices
+            current_alpha, current_choices = _evaluate_dimension_plan(
+                items,
+                sample_count,
+                sigma_e,
+                theta,
+                reversed_keys,
+                standard_noise,
+                micro_jitter_noise,
+            )
+            evaluated_candidates.append((sigma_e, current_alpha, current_choices))
+
+        for sigma_e in _build_refined_sigma_candidates(
+            [(sigma_value, alpha_value) for sigma_value, alpha_value, _ in evaluated_candidates],
+            target_alpha,
+        ):
+            current_alpha, current_choices = _evaluate_dimension_plan(
+                items,
+                sample_count,
+                sigma_e,
+                theta,
+                reversed_keys,
+                standard_noise,
+                micro_jitter_noise,
+            )
+            evaluated_candidates.append((sigma_e, current_alpha, current_choices))
+
+        _best_sigma, best_alpha, best_choices_by_item = min(
+            evaluated_candidates,
+            key=lambda item: _alpha_fit_key(item[1], target_alpha),
+        )
 
         actual_alpha = max(0.0, float(best_alpha))
         degraded_for_ratio = actual_alpha + 1e-6 < target_alpha
