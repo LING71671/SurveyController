@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 from typing import Any, Callable, Dict, List, Optional, Set
 
-from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal
+from PySide6.QtCore import QCoreApplication, QObject, QTimer, Signal, Slot
 
 from software.core.questions.config import QuestionEntry
 from software.core.task import ExecutionConfig, ExecutionState
@@ -205,7 +206,7 @@ class RunController(
     cleanupFinished = Signal()
     runtimeUiStateChanged = Signal(dict)
     randomIpLoadingChanged = Signal(bool, str)
-    _uiCallbackQueued = Signal(object)
+    _uiCallbackQueued = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -242,23 +243,39 @@ class RunController(
         self._init_gate_stop_event: Optional[threading.Event] = None
         self._pending_execution_config: Optional[ExecutionConfig] = None
         self._runtime_ui_state: Dict[str, Any] = {}
+        self._ui_callback_queue: "queue.Queue[Callable[[], Any]]" = queue.Queue()
         self._random_ip_toggle_lock = threading.Lock()
         self._random_ip_toggle_active = False
         self._random_ip_server_sync_lock = threading.Lock()
         self._random_ip_server_sync_active = False
         self._random_ip_last_server_sync_at = 0.0
-        self._uiCallbackQueued.connect(self._execute_ui_callback)
+        self._uiCallbackQueued.connect(self._drain_ui_callbacks)
 
     def is_initializing(self) -> bool:
         return bool(self._initializing)
 
-    def _execute_ui_callback(self, callback: object) -> None:
-        if not callable(callback):
-            return
+    @Slot()
+    def _drain_ui_callbacks(self) -> None:
+        while True:
+            try:
+                callback = self._ui_callback_queue.get_nowait()
+            except queue.Empty:
+                return
+            if not callable(callback):
+                continue
+            try:
+                callback()
+            except Exception:
+                logging.info("执行 UI 回调失败", exc_info=True)
+
+    def _enqueue_ui_callback(self, callback: Callable[[], Any]) -> bool:
         try:
-            callback()
+            self._ui_callback_queue.put_nowait(callback)
+            self._uiCallbackQueued.emit()
+            return True
         except Exception:
-            logging.info("执行 UI 回调失败", exc_info=True)
+            logging.warning("UI 回调入队失败", exc_info=True)
+            return False
 
     def _dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None:
         if not callable(callback):
@@ -275,14 +292,7 @@ class RunController(
             except Exception:
                 logging.info("主线程直接执行回调失败", exc_info=True)
             return
-        try:
-            self._uiCallbackQueued.emit(callback)
-        except Exception:
-            logging.warning("UI 回调入队失败，尝试直接执行", exc_info=True)
-            try:
-                callback()
-            except Exception:
-                logging.info("UI 回调入队失败且直接执行失败", exc_info=True)
+        self._enqueue_ui_callback(callback)
 
     def configure_ui_bridge(
         self,

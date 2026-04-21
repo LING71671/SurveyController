@@ -58,6 +58,7 @@ class RunControllerExecutionMixin:
         questions_info: List[Dict[str, Any]]
 
         def _dispatch_to_ui_async(self, callback: Callable[[], Any]) -> None: ...
+        def _enqueue_ui_callback(self, callback: Callable[[], Any]) -> bool: ...
         def _sync_adapter_ui_bridge(self, adapter: Optional[Any] = None) -> None: ...
         def sync_runtime_ui_state_from_config(self, config: RuntimeConfig, *, emit: bool = True) -> Dict[str, Any]: ...
         def refresh_random_ip_counter(self, *, adapter: Optional[Any] = None, async_mode: bool = True) -> None: ...
@@ -119,7 +120,8 @@ class RunControllerExecutionMixin:
             finally:
                 done.set()
 
-        self._dispatch_to_ui_async(_run)
+        if not self._enqueue_ui_callback(_run):
+            return None
         if not done.wait(timeout=3):
             logging.warning("UI 调度超时，放弃等待以避免阻塞")
             return None
