@@ -26,6 +26,7 @@ from qfluentwidgets import (
 from software.ui.helpers.contact_api import get_session_snapshot
 from software.ui.helpers.fluent_tooltip import install_tooltip_filters
 from software.ui.helpers.image_attachments import ImageAttachmentManager
+from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 from software.ui.widgets.status_polling_mixin import StatusPollingMixin
 
 from .attachments import ContactFormAttachmentsMixin
@@ -141,7 +142,7 @@ class ContactForm(
         self.verify_code_edit.setMaximumWidth(120)
 
         self.send_verify_btn = PushButton("发送验证码", self)
-        self.verify_send_spinner = IndeterminateProgressRing(self)
+        self.verify_send_spinner = IndeterminateProgressRing(self, start=False)
         self.verify_send_spinner.setFixedSize(16, 16)
         self.verify_send_spinner.setStrokeWidth(2)
         self.verify_send_spinner.hide()
@@ -350,7 +351,7 @@ class ContactForm(
 
         status_row = QHBoxLayout()
         status_row.setSpacing(8)
-        self.status_spinner = IndeterminateProgressRing(self)
+        self.status_spinner = IndeterminateProgressRing(self, start=False)
         self.status_spinner.setFixedSize(16, 16)
         self.status_spinner.setStrokeWidth(2)
         self.status_icon = IconWidget(FluentIcon.INFO, self)
@@ -369,7 +370,7 @@ class ContactForm(
             self.cancel_btn = PushButton("取消", self)
             btn_row.addWidget(self.cancel_btn)
         self.send_btn = PrimaryPushButton("发送", self)
-        self.send_spinner = IndeterminateProgressRing(self)
+        self.send_spinner = IndeterminateProgressRing(self, start=False)
         self.send_spinner.setFixedSize(20, 20)
         self.send_spinner.setStrokeWidth(3)
         self.send_spinner.hide()
@@ -452,6 +453,7 @@ class ContactForm(
     def hideEvent(self, event):
         if self._manage_polling:
             self.stop_status_polling()
+        self._set_status_loading(False)
         super().hideEvent(event)
 
     def closeEvent(self, event):
@@ -462,6 +464,7 @@ class ContactForm(
             return
         self.stop_status_polling()
         self._stop_cooldown()
+        self._stop_activity_indicators()
 
         # 关闭所有可能存在的 InfoBar，避免其内部线程导致崩溃
         self._close_all_infobars()
@@ -502,6 +505,20 @@ class ContactForm(
             return
         InfoBar.warning("", message, parent=self, position=InfoBarPosition.TOP, duration=2500)
 
+    def _set_status_loading(self, loading: bool) -> None:
+        set_indeterminate_progress_ring_active(self.status_spinner, loading)
+
+    def _set_send_loading(self, loading: bool) -> None:
+        set_indeterminate_progress_ring_active(self.send_spinner, loading)
+
+    def _set_verify_loading(self, loading: bool) -> None:
+        set_indeterminate_progress_ring_active(self.verify_send_spinner, loading)
+
+    def _stop_activity_indicators(self) -> None:
+        self._set_status_loading(False)
+        self._set_send_loading(False)
+        self._set_verify_loading(False)
+
     def refresh_random_ip_user_id_hint(self) -> None:
         """刷新消息框下方的随机IP账号提示。"""
         try:
@@ -523,7 +540,7 @@ class ContactForm(
         if self._polling_started:
             return
         self._polling_started = True
-        self.status_spinner.show()
+        self._set_status_loading(True)
         self.status_icon.hide()
         self.online_label.setText("作者当前在线状态：查询中...")
         self.online_label.setStyleSheet("color:#BA8303;")
@@ -534,6 +551,7 @@ class ContactForm(
             return
         self._polling_started = False
         self._stop_status_polling()
+        self._set_status_loading(False)
 
     def _on_type_changed(self):
         current_type = self.type_combo.currentText()

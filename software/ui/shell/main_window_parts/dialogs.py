@@ -6,6 +6,7 @@ import threading
 from typing import Any, Dict
 
 from PySide6.QtCore import QCoreApplication, QThread, QTimer
+from PySide6.QtWidgets import QDialog
 from qfluentwidgets import InfoBar, InfoBarPosition, MessageBox
 from software.logging.action_logger import log_action
 
@@ -46,6 +47,31 @@ class MainWindowDialogsMixin:
         else:
             InfoBar.info("", text, parent=self, position=InfoBarPosition.TOP, duration=duration)
 
+    def _dispatch_to_ui_async(self, func) -> None:
+        if self.thread() == QThread.currentThread():  # type: ignore[attr-defined]
+            func()
+            return
+        if QCoreApplication.instance() is None:
+            func()
+            return
+        QTimer.singleShot(0, func)
+
+    def _track_async_dialog(self, dialog: QDialog) -> None:
+        dialogs = getattr(self, "_async_dialog_refs", None)
+        if dialogs is None:
+            dialogs = []
+            self._async_dialog_refs = dialogs
+        dialogs.append(dialog)
+
+        def _cleanup(*_args) -> None:
+            current = getattr(self, "_async_dialog_refs", None) or []
+            try:
+                current.remove(dialog)
+            except ValueError:
+                pass
+
+        dialog.destroyed.connect(_cleanup)
+
     def show_confirm_dialog(self, title: str, message: str) -> bool:
         """显示确认对话框，返回用户是否确认。"""
 
@@ -75,6 +101,7 @@ class MainWindowDialogsMixin:
             box = MessageBox(title, message, self)
             box.yesButton.setText("确定")
             box.cancelButton.hide()
-            box.exec()
+            self._track_async_dialog(box)
+            box.open()
 
-        self._dispatch_to_ui(_show)
+        self._dispatch_to_ui_async(_show)

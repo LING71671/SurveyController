@@ -5,6 +5,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any, Optional, cast
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QDialog
 from qfluentwidgets import FluentIcon, themeColor
 
 from software.ui.dialogs.contact import ContactDialog
@@ -274,7 +275,13 @@ class DashboardRandomIPMixin:
             status_endpoint=STATUS_ENDPOINT,
             status_formatter=format_status_payload,
         )
-        dlg.exec()
+        if str(default_type or "").strip() == "报错反馈":
+            self._contact_dialog = dlg
+            dlg.finished.connect(lambda *_args: setattr(self, "_contact_dialog", None))
+            dlg.destroyed.connect(lambda *_args: setattr(self, "_contact_dialog", None))
+            dlg.open()
+            return False
+        return dlg.exec() == QDialog.DialogCode.Accepted
 
     def _on_request_quota_clicked(self):
         """用户主动打开额度申请表单。"""

@@ -219,6 +219,41 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
         manager_cls.remove = _safe_remove
         manager_cls.eventFilter = _safe_event_filter
         setattr(manager_cls, "_surveycontroller_remove_guard_installed", True)
+
+
+def set_indeterminate_progress_ring_active(ring: Any, active: bool) -> None:
+    """统一控制 ProgressRing 动画状态，避免隐藏控件还在后台乱转。"""
+    if ring is None:
+        return
+
+    try:
+        ani_group = getattr(ring, "aniGroup", None)
+        if active:
+            ring.show()
+            if ani_group is not None:
+                state = ani_group.state()
+                if state == QAbstractAnimation.State.Paused:
+                    ani_group.resume()
+                elif state != QAbstractAnimation.State.Running:
+                    ring.start()
+            else:
+                ring.start()
+            return
+
+        if ani_group is not None and ani_group.state() != QAbstractAnimation.State.Stopped:
+            ring.stop()
+        elif hasattr(ring, "stop"):
+            ring.stop()
+        ring.hide()
+    except RuntimeError:
+        pass
+    except Exception:
+        try:
+            ring.hide()
+        except Exception:
+            pass
+
 __all__ = [
     "install_qfluentwidgets_animation_guards",
+    "set_indeterminate_progress_ring_active",
 ]

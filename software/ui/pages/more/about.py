@@ -36,6 +36,8 @@ from qfluentwidgets import (
 from software.app.version import __VERSION__, GITHUB_OWNER, GITHUB_REPO
 from software.ui.widgets.full_width_infobar import FullWidthInfoBar
 from software.app.runtime_paths import get_resource_path
+from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
+from shiboken6 import isValid
 
 
 class AboutPage(ScrollArea):
@@ -57,6 +59,7 @@ class AboutPage(ScrollArea):
         self.enableTransparentBackground()
 
         self._checking_update = False
+        self._terms_dialog = None
 
         self._build_ui()
 
@@ -134,7 +137,7 @@ class AboutPage(ScrollArea):
         version_row.addWidget(v_num)
         version_row.addWidget(self.publish_time_label)
         version_row.addStretch(1)
-        self.update_spinner = IndeterminateProgressRing(self)
+        self.update_spinner = IndeterminateProgressRing(self, start=False)
         self.update_spinner.setFixedSize(16, 16)
         self.update_spinner.setStrokeWidth(2)
         self.update_spinner.hide()
@@ -246,10 +249,9 @@ class AboutPage(ScrollArea):
         self.update_btn.setEnabled(not loading)
         if loading:
             self.update_btn.setText("检查中...")
-            self.update_spinner.show()
         else:
             self.update_btn.setText("检查更新")
-            self.update_spinner.hide()
+        set_indeterminate_progress_ring_active(self.update_spinner, loading)
 
     @Slot(object)
     def _on_update_result(self, update_info):
@@ -327,9 +329,17 @@ class AboutPage(ScrollArea):
 
     def _show_terms_of_service(self):
         """显示服务条款对话框"""
+        dialog = getattr(self, "_terms_dialog", None)
+        if dialog is not None and isValid(dialog):
+            dialog.raise_()
+            dialog.activateWindow()
+            return
         from software.ui.dialogs.terms_of_service import TermsOfServiceDialog
         dlg = TermsOfServiceDialog(self.window())
-        dlg.exec()
+        self._terms_dialog = dlg
+        dlg.finished.connect(lambda *_args: setattr(self, "_terms_dialog", None))
+        dlg.destroyed.connect(lambda *_args: setattr(self, "_terms_dialog", None))
+        dlg.open()
 
 
 

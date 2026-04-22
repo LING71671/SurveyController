@@ -4,9 +4,9 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import QThread, QTimer, Qt
+from PySide6.QtCore import QObject, QThread, QTimer, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from qfluentwidgets import (
@@ -23,6 +23,7 @@ from qfluentwidgets import (
 from software.app.config import app_settings, get_bool_from_qsettings
 from software.app.version import __VERSION__
 from software.logging.action_logger import log_action
+from software.ui.helpers.qfluent_compat import set_indeterminate_progress_ring_active
 
 
 class MainWindowUpdateMixin:
@@ -39,6 +40,9 @@ class MainWindowUpdateMixin:
         _settings_page: Any
         _update_check_thread: Any
         _update_check_worker: Any
+        _startup_update_check_timer: Any
+        _startup_update_check_completed: bool
+        _startup_update_check_suspended: bool
 
     @staticmethod
     def _is_preview_version() -> bool:
@@ -52,27 +56,64 @@ class MainWindowUpdateMixin:
     def _check_update_on_startup(self):
         """根据设置在启动时检查更新（后台异步执行）"""
         settings = app_settings()
-        if get_bool_from_qsettings(settings.value("auto_check_update"), True):
-            from software.ui.workers.update_worker import UpdateCheckWorker
+        if not get_bool_from_qsettings(settings.value("auto_check_update"), True):
+            self._startup_update_check_completed = True
+            return
+        self._schedule_startup_update_check(15000)
 
-            from typing import cast
-            from PySide6.QtCore import QObject
-            self._show_update_checking_placeholder()
-            self._stop_update_check_worker()
-            worker = UpdateCheckWorker()
-            thread = QThread(cast(QObject, self))
-            worker.moveToThread(thread)
-            thread.started.connect(worker.run)
-            worker.finished.connect(self._on_update_checked)
-            worker.finished.connect(thread.quit)
-            worker.finished.connect(worker.deleteLater)
-            thread.finished.connect(thread.deleteLater)
-            thread.finished.connect(self._clear_update_check_worker_refs)
-            self._update_check_worker = worker
-            self._update_check_thread = thread
-            thread.start()
+    def _ensure_startup_update_check_timer(self) -> QTimer:
+        timer = getattr(self, "_startup_update_check_timer", None)
+        if timer is None:
+            timer = QTimer(cast(QObject, self))
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._on_startup_update_check_timeout)
+            self._startup_update_check_timer = timer
+        return timer
 
-            logging.info("已启动后台更新检查")
+    def _schedule_startup_update_check(self, delay_ms: int) -> None:
+        if getattr(self, "_startup_update_check_completed", False):
+            return
+        self._ensure_startup_update_check_timer().start(max(int(delay_ms), 0))
+
+    def _cancel_startup_update_check(self) -> None:
+        timer = getattr(self, "_startup_update_check_timer", None)
+        if timer is not None:
+            timer.stop()
+
+    def _set_startup_update_check_suspended(self, suspended: bool) -> None:
+        self._startup_update_check_suspended = bool(suspended)
+        if not suspended and not getattr(self, "_startup_update_check_completed", False):
+            timer = getattr(self, "_startup_update_check_timer", None)
+            if timer is None or not timer.isActive():
+                self._schedule_startup_update_check(2500)
+
+    def _on_startup_update_check_timeout(self) -> None:
+        if getattr(self, "_startup_update_check_completed", False):
+            return
+        if getattr(self, "_startup_update_check_suspended", False):
+            self._schedule_startup_update_check(5000)
+            return
+        self._start_update_check_worker()
+
+    def _start_update_check_worker(self) -> None:
+        from software.ui.workers.update_worker import UpdateCheckWorker
+
+        self._show_update_checking_placeholder()
+        self._stop_update_check_worker()
+        worker = UpdateCheckWorker()
+        thread = QThread(cast(QObject, self))
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_update_checked)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_update_check_worker_refs)
+        self._update_check_worker = worker
+        self._update_check_thread = thread
+        thread.start()
+
+        logging.info("已启动后台更新检查")
 
     def _clear_update_check_worker_refs(self):
         self._update_check_thread = None
@@ -92,6 +133,7 @@ class MainWindowUpdateMixin:
 
     def _on_update_checked(self, has_update: bool, update_info: dict):
         """更新检查完成的回调"""
+        self._startup_update_check_completed = True
         self._clear_update_checking_placeholder()
         status = update_info.get("status", "unknown") if update_info else "unknown"
         if has_update:
@@ -189,12 +231,13 @@ class MainWindowUpdateMixin:
                 logging.info("移除旧徽章失败", exc_info=True)
             setattr(self, attr, None)
         try:
-            spinner = IndeterminateProgressRing(parent=self._ensure_title_bar_status_container() or self.titleBar)
+            spinner = IndeterminateProgressRing(parent=self._ensure_title_bar_status_container() or self.titleBar, start=False)
             spinner.setFixedSize(16, 16)
             spinner.setStrokeWidth(2)
             if not self._mount_title_bar_status_widget(spinner):
                 spinner.deleteLater()
                 return
+            set_indeterminate_progress_ring_active(spinner, True)
             self._update_checking_spinner = spinner
         except Exception:
             logging.info("显示更新检查占位失败", exc_info=True)
@@ -204,6 +247,7 @@ class MainWindowUpdateMixin:
         if spinner is None:
             return
         try:
+            set_indeterminate_progress_ring_active(spinner, False)
             self._clear_title_bar_status_widget(spinner)
         except Exception:
             logging.info("清理更新检查占位失败", exc_info=True)

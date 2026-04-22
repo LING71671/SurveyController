@@ -235,9 +235,12 @@ class WizardCardsMixin:
         box = MessageBox("保存失败", message, self)
         box.yesButton.setText("知道了")
         box.cancelButton.hide()
-        box.exec()
+        self._validation_error_dialog = box
+        box.finished.connect(lambda *_args: setattr(self, "_validation_error_dialog", None))
+        box.destroyed.connect(lambda *_args: setattr(self, "_validation_error_dialog", None))
         if focus_widget is not None:
-            QTimer.singleShot(0, focus_widget.setFocus)
+            box.finished.connect(lambda *_args, widget=focus_widget: QTimer.singleShot(0, widget.setFocus))
+        box.open()
     def _validate_random_integer_inputs(self) -> bool:
         for idx, mode in self.text_random_mode_map.items():
             if str(mode or "").strip().lower() != "integer":

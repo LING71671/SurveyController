@@ -21,6 +21,7 @@ from qfluentwidgets import (
     setTheme,
     setThemeColor,
 )
+from shiboken6 import isValid
 
 from software.ui.pages.workbench.dashboard import DashboardPage
 from software.ui.pages.workbench.runtime_panel import RuntimePage
@@ -86,6 +87,12 @@ class MainWindow(
         self._community_hint_setting_key = "community_card_request_badge_pending"
         self._community_hint_pending = False
         self._community_hint_badge = None
+        self._async_dialog_refs = []
+        self._contact_dialog = None
+        self._contact_dialog_active = False
+        self._startup_update_check_timer = None
+        self._startup_update_check_completed = False
+        self._startup_update_check_suspended = False
         self._random_ip_quota_auto_sync_interval_ms = 90000
         self._random_ip_quota_auto_sync_timer = QTimer(self)
         self._random_ip_quota_auto_sync_timer.setInterval(self._random_ip_quota_auto_sync_interval_ms)
@@ -381,6 +388,15 @@ class MainWindow(
             self._set_community_hint_pending(False)
 
     def _open_contact_dialog(self, default_type: str = "报错反馈", lock_message_type: bool = False):
+        dialog = getattr(self, "_contact_dialog", None)
+        if dialog is not None and isValid(dialog):
+            try:
+                dialog.raise_()
+                dialog.activateWindow()
+            except Exception:
+                logging.info("联系开发者窗口前置失败", exc_info=True)
+            return False
+
         log_action(
             "UI",
             "open_contact_dialog",
@@ -396,8 +412,31 @@ class MainWindow(
             status_endpoint=STATUS_ENDPOINT,
             status_formatter=format_status_payload,
         )
+        async_mode = str(default_type or "").strip() == "报错反馈"
+        self._contact_dialog = dlg
+        self._contact_dialog_active = True
+        self._set_startup_update_check_suspended(True)
         dlg.form.quotaRequestSucceeded.connect(self._on_quota_request_sent)
-        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        dlg.finished.connect(
+            lambda result, dialog=dlg, locked=bool(lock_message_type): self._on_contact_dialog_finished(
+                dialog,
+                result,
+                locked,
+            )
+        )
+        dlg.destroyed.connect(lambda *_args, dialog=dlg: self._on_contact_dialog_destroyed(dialog))
+        if async_mode:
+            dlg.open()
+            try:
+                dlg.raise_()
+                dlg.activateWindow()
+            except Exception:
+                logging.info("异步打开联系开发者窗口后前置失败", exc_info=True)
+            return False
+        return dlg.exec() == QDialog.DialogCode.Accepted
+
+    def _on_contact_dialog_finished(self, dialog: QDialog, result: int, lock_message_type: bool) -> None:
+        accepted = int(result) == int(QDialog.DialogCode.Accepted)
         log_action(
             "UI",
             "open_contact_dialog",
@@ -406,7 +445,14 @@ class MainWindow(
             result="submitted" if accepted else "cancelled",
             payload={"locked_type": bool(lock_message_type)},
         )
-        return accepted
+        self._on_contact_dialog_destroyed(dialog)
+
+    def _on_contact_dialog_destroyed(self, dialog: QDialog) -> None:
+        current_dialog = getattr(self, "_contact_dialog", None)
+        if current_dialog is dialog:
+            self._contact_dialog = None
+            self._contact_dialog_active = False
+            self._set_startup_update_check_suspended(False)
 
     def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
         self.show_message_dialog(title, message, level=level)

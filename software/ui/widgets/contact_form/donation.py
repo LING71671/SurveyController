@@ -32,6 +32,7 @@ class ContactFormDonationMixin:
         def _normalize_quantity_if_needed(self) -> None: ...
         def _parse_amount_value(self, text: Optional[str] = None) -> Optional[Decimal]: ...
         def _update_send_button_state(self) -> None: ...
+        def _set_status_loading(self, loading: bool) -> None: ...
         def window(self) -> QWidget: ...
 
     def _get_donation_check_block_reason(self) -> str:
@@ -127,7 +128,7 @@ class ContactFormDonationMixin:
     def _on_status_loaded(self, text: str, color: str):
         """信号槽：在主线程更新状态标签"""
         try:
-            self.status_spinner.hide()
+            self._set_status_loading(False)
             self.status_icon.show()
             if color.lower() == "#228b22":
                 self.status_icon.setIcon(FluentIcon.ACCEPT)

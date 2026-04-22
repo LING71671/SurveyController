@@ -116,6 +116,7 @@ class ContactFormSubmissionMixin:
         def _close_amount_rule_infobar(self) -> None: ...
         def _render_attachments_ui(self) -> None: ...
         def _clear_payment_method_selection(self) -> None: ...
+        def _set_send_loading(self, loading: bool) -> None: ...
         def refresh_random_ip_user_id_hint(self) -> None: ...
         def _is_bug_report_type(self, message_type: Optional[str]) -> bool: ...
         def _reset_bug_report_auto_attach_defaults(self) -> None: ...
@@ -373,8 +374,8 @@ class ContactFormSubmissionMixin:
 
         self.send_btn.setEnabled(False)
         self.send_btn.setText("发送中...")
-        self.send_spinner.show()
         self._send_in_progress = True
+        self._set_send_loading(True)
         self._update_send_button_state()
 
         self._current_message_type = mtype
@@ -413,7 +414,7 @@ class ContactFormSubmissionMixin:
     def _on_send_finished(self, success: bool, error_msg: str):
         """发送完成回调（在主线程执行）"""
         self._send_in_progress = False
-        self.send_spinner.hide()
+        self._set_send_loading(False)
         self.send_btn.setText("发送")
         self._update_send_button_state()
         self._cleanup_pending_temp_files()

@@ -19,7 +19,9 @@ class MainWindowLifecycleMixin:
     """收口主窗口的保存、启动恢复、标题刷新与关闭清理。"""
 
     if TYPE_CHECKING:
+        _async_dialog_refs: Any
         _boot_splash: Any
+        _contact_dialog: Any
         _log_page: Any
         _support_page: Any
         _random_ip_quota_auto_sync_timer: Any
@@ -32,6 +34,7 @@ class MainWindowLifecycleMixin:
         controller: Any
 
         def _stop_update_check_worker(self) -> None: ...
+        def _cancel_startup_update_check(self) -> None: ...
 
     def _cleanup_runtime_resources_on_close(self) -> None:
         try:
@@ -66,6 +69,27 @@ class MainWindowLifecycleMixin:
             self._stop_update_check_worker()
         except Exception as exc:
             log_suppressed_exception("closeEvent: self._stop_update_check_worker()", exc)
+
+        try:
+            self._cancel_startup_update_check()
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: self._cancel_startup_update_check()", exc)
+
+        try:
+            dialog = getattr(self, "_contact_dialog", None)
+            if dialog is not None:
+                dialog.close()
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: self._contact_dialog.close()", exc)
+
+        try:
+            for dialog in list(getattr(self, "_async_dialog_refs", []) or []):
+                try:
+                    dialog.close()
+                except Exception as dialog_exc:
+                    log_suppressed_exception("closeEvent: async_dialog.close()", dialog_exc)
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: async dialogs cleanup", exc)
 
     def _persist_last_session_log(self) -> None:
         try:

@@ -24,12 +24,13 @@ class ContactFormVerificationMixin:
         _verifyCodeFinished: Any
 
         def _validate_email(self, email: str) -> bool: ...
+        def _set_verify_loading(self, loading: bool) -> None: ...
 
     def _set_verify_code_sending(self, sending: bool):
         self._verify_code_sending = sending
         self.send_verify_btn.setEnabled(not sending)
         self.send_verify_btn.setText("发送中..." if sending else "发送验证码")
-        self.verify_send_spinner.setVisible(sending)
+        self._set_verify_loading(sending)
     def _start_cooldown(self):
         """发送成功后启动30秒冷却，期间按钮不可点击并显示倒计时。"""
         self._cooldown_remaining = 30

@@ -150,7 +150,13 @@ class ConfigDrawer(QWidget):
         try:
             os.startfile(configs_dir)
         except Exception as exc:
-            MessageBox("打开失败", f"无法打开配置文件夹：{exc}", self).exec()
+            box = MessageBox("打开失败", f"无法打开配置文件夹：{exc}", self)
+            box.yesButton.setText("知道了")
+            box.cancelButton.hide()
+            self._folder_error_box = box
+            box.finished.connect(lambda *_args: setattr(self, "_folder_error_box", None))
+            box.destroyed.connect(lambda *_args: setattr(self, "_folder_error_box", None))
+            box.open()
 
     def _apply_theme(self):
         if isDarkTheme():
