@@ -466,6 +466,14 @@ class MainWindow(
     def _show_dialog_message(self, title: str, message: str, level: str = "info") -> None:
         self.show_message_dialog(title, message, level=level)
 
+    def _prompt_quick_bug_report(self) -> None:
+        confirmed = self.show_confirm_dialog(
+            "运行异常",
+            "本次运行因异常提前终止，是否打开报错反馈？",
+        )
+        if confirmed:
+            self._open_contact_dialog(default_type="报错反馈", lock_message_type=True)
+
     def _center_on_screen(self):
         """窗口居中显示，适配多显示器与缩放。"""
         try:
@@ -514,6 +522,7 @@ class MainWindow(
         self.controller.threadProgressUpdated.connect(self.dashboard.update_thread_progress)
         self.controller.pauseStateChanged.connect(self.dashboard.on_pause_state_changed)
         self.controller.cleanupFinished.connect(self.dashboard.on_cleanup_finished)
+        self.controller.quickBugReportSuggested.connect(self._prompt_quick_bug_report)
         self.controller.on_ip_counter = self._on_random_ip_counter_update
 
     def _register_popups(self):

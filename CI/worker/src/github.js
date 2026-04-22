@@ -6,6 +6,8 @@ import {
   sanitizeIssueTitle,
 } from "./message.js";
 
+const DEFAULT_GITHUB_ISSUE_LABELS = ["bot"];
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -96,6 +98,49 @@ async function buildGitHubIssueBody({ message, files }) {
   return lines.join("\n");
 }
 
+function parseConfiguredIssueLabels(env) {
+  const raw = typeof env.GITHUB_ISSUE_LABELS === "string" ? env.GITHUB_ISSUE_LABELS : "";
+  const configuredLabels = raw
+    .split(",")
+    .map((label) => label.trim())
+    .filter(Boolean);
+
+  return configuredLabels.length > 0 ? configuredLabels : DEFAULT_GITHUB_ISSUE_LABELS;
+}
+
+async function fetchExistingGitHubLabels({ owner, repo, token }) {
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/labels?per_page=100`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "SurveyController-Worker",
+      "X-GitHub-Api-Version": GITHUB_API_VERSION,
+    },
+  });
+
+  if (!response.ok) {
+    return new Set();
+  }
+
+  let result = null;
+  try {
+    result = await response.json();
+  } catch {
+    result = null;
+  }
+
+  if (!Array.isArray(result)) {
+    return new Set();
+  }
+
+  return new Set(
+    result
+      .map((label) => (typeof label?.name === "string" ? label.name.trim() : ""))
+      .filter(Boolean),
+  );
+}
+
 export async function createGitHubIssue(env, payload) {
   const token = env.GITHUB_TOKEN;
   if (!token) {
@@ -104,6 +149,8 @@ export async function createGitHubIssue(env, payload) {
 
   const owner = env.GITHUB_OWNER || DEFAULT_GITHUB_OWNER;
   const repo = env.GITHUB_REPO || DEFAULT_GITHUB_REPO;
+  const existingLabels = await fetchExistingGitHubLabels({ owner, repo, token });
+  const labels = parseConfiguredIssueLabels(env).filter((label) => existingLabels.has(label));
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues`, {
     method: "POST",
     headers: {
@@ -116,6 +163,7 @@ export async function createGitHubIssue(env, payload) {
     body: JSON.stringify({
       title: buildGitHubIssueTitle(payload),
       body: await buildGitHubIssueBody(payload),
+      ...(labels.length > 0 ? { labels } : {}),
     }),
   });
 

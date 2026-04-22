@@ -61,6 +61,11 @@ class RunStopPolicy:
                 logging.info("更新线程失败计数失败", exc_info=True)
         if self.config.stop_on_fail_enabled and self.state.cur_fail >= self.config.fail_threshold:
             logging.critical("连续失败次数过多，强制停止，请检查配置是否正确")
+            self.state.mark_terminal_stop(
+                "fail_threshold",
+                failure_reason=getattr(failure_reason, "value", str(failure_reason or "")),
+                message=message or status_text,
+            )
             if stop_signal:
                 stop_signal.set()
             return True
@@ -123,6 +128,7 @@ class RunStopPolicy:
                     stop_signal.set()
                 return
             self.state._target_reached_stop_triggered = True
+        self.state.mark_terminal_stop("target_reached", message="目标份数已达成")
         if stop_signal:
             stop_signal.set()
         _event_bus.emit(EVENT_TARGET_REACHED, state=self.state, config=self.config)

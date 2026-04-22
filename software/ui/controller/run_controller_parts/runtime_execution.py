@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 from PySide6.QtCore import QCoreApplication
 
 from software.app.config import STOP_FORCE_WAIT_SECONDS, app_settings, get_bool_from_qsettings
+from software.core.engine.failure_reason import FailureReason
 from software.core.engine.runner import run
 from software.core.questions.config import configure_probabilities, validate_question_config
 from software.core.task import EVENT_TASK_STARTED, EVENT_TASK_STOPPED, ExecutionConfig, ExecutionState, ProxyLease
@@ -29,6 +30,7 @@ class RunControllerExecutionMixin:
         threadProgressUpdated: Any
         pauseStateChanged: Any
         cleanupFinished: Any
+        quickBugReportSuggested: Any
         quota_request_form_opener: Optional[Callable[[], bool]]
         on_ip_counter: Optional[Callable[[float, float, bool], None]]
         on_random_ip_loading: Optional[Callable[[bool, str], None]]
@@ -56,6 +58,7 @@ class RunControllerExecutionMixin:
         _monitor_thread: Optional[threading.Thread]
         _pending_execution_config: Optional[ExecutionConfig]
         _execution_state: Optional[ExecutionState]
+        _quick_feedback_prompt_emitted: bool
         _sleep_blocker: Any
         survey_provider: str
         question_entries: List[Any]
@@ -73,6 +76,7 @@ class RunControllerExecutionMixin:
         def _apply_pending_execution_config(self, config: ExecutionConfig, *, consume: bool) -> None: ...
         def _reset_initialization_state(self) -> None: ...
         def _build_initialization_logs(self) -> List[str]: ...
+        def _emit_quick_bug_report_suggestion_if_needed(self) -> None: ...
 
     def _create_adapter(self, stop_signal: threading.Event, *, random_ip_enabled: bool = False):
         adapter_cls = getattr(self, "_engine_adapter_cls", None)
@@ -182,6 +186,7 @@ class RunControllerExecutionMixin:
         self._completion_cleanup_done = False
         self._cleanup_scheduled = False
         self._stopped_by_stop_run = False
+        self._quick_feedback_prompt_emitted = False
         self._starting = True
         self._initializing = False
         self._init_stage_text = ""
@@ -296,6 +301,7 @@ class RunControllerExecutionMixin:
             self.running = False
             self.runStateChanged.emit(False)
         self._emit_status()
+        self._emit_quick_bug_report_suggestion_if_needed()
     def _submit_cleanup_task(
         self,
         adapter_snapshot: Optional[Any] = None,
@@ -323,6 +329,13 @@ class RunControllerExecutionMixin:
             delay_seconds=STOP_FORCE_WAIT_SECONDS,
         )
     def stop_run(self):
+        ctx = getattr(self, "_execution_state", None)
+        if ctx is not None:
+            ctx.mark_terminal_stop(
+                "user_stopped",
+                failure_reason=FailureReason.USER_STOPPED.value,
+                message="用户手动停止任务",
+            )
         if self._starting and not self.running:
             self.stop_event.set()
             gate_stop = self._init_gate_stop_event
@@ -409,6 +422,31 @@ class RunControllerExecutionMixin:
         if self._init_gate_thread is not None and not self._init_gate_thread.is_alive():
             self._init_gate_thread = None
         return not any(thread.is_alive() for thread in pending)
+
+    def _emit_quick_bug_report_suggestion_if_needed(self) -> None:
+        if self._quick_feedback_prompt_emitted:
+            return
+        if self.running or self._starting or self._initializing:
+            return
+        ctx = getattr(self, "_execution_state", None)
+        if ctx is None:
+            return
+        category, failure_reason, _message = ctx.get_terminal_stop_snapshot()
+        category = str(category or "").strip()
+        failure_reason = str(failure_reason or "").strip()
+        if not category:
+            return
+        if category in {"target_reached", "user_stopped", "submission_verification"}:
+            return
+        if failure_reason in {
+            FailureReason.DEVICE_QUOTA_LIMIT.value,
+            FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value,
+            FailureReason.USER_STOPPED.value,
+        }:
+            return
+        self._quick_feedback_prompt_emitted = True
+        self.quickBugReportSuggested.emit()
+
     def resume_run(self):
         """Resume execution after a pause (does not restart threads)."""
         if not self.running:

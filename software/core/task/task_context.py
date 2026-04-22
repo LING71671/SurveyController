@@ -101,6 +101,9 @@ class ExecutionState:
     cur_num: int = 0
     cur_fail: int = 0
     device_quota_fail_count: int = 0
+    terminal_stop_category: str = ""
+    terminal_failure_reason: str = ""
+    terminal_stop_message: str = ""
     thread_progress: Dict[str, ThreadProgressState] = field(default_factory=dict)
     distribution_runtime_stats: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]] = field(default_factory=dict)
@@ -118,6 +121,7 @@ class ExecutionState:
     _aliyun_captcha_popup_shown: bool = False
     _target_reached_stop_triggered: bool = False
     _target_reached_stop_lock: threading.Lock = field(default_factory=threading.Lock)
+    _terminal_stop_lock: threading.Lock = field(default_factory=threading.Lock)
 
     _proxy_fetch_lock: threading.Lock = field(default_factory=threading.Lock)
     _browser_semaphore: Optional[threading.Semaphore] = field(default=None, repr=False)
@@ -310,6 +314,34 @@ class ExecutionState:
             state.running = False
             state.status_text = str(status_text or "已停止")
             state.last_update_ts = now
+
+    def mark_terminal_stop(
+        self,
+        category: str,
+        *,
+        failure_reason: str = "",
+        message: str = "",
+        overwrite: bool = False,
+    ) -> None:
+        normalized_category = str(category or "").strip()
+        if not normalized_category:
+            return
+        normalized_failure_reason = str(failure_reason or "").strip()
+        normalized_message = str(message or "").strip()
+        with self._terminal_stop_lock:
+            if self.terminal_stop_category and not overwrite:
+                return
+            self.terminal_stop_category = normalized_category
+            self.terminal_failure_reason = normalized_failure_reason
+            self.terminal_stop_message = normalized_message
+
+    def get_terminal_stop_snapshot(self) -> Tuple[str, str, str]:
+        with self._terminal_stop_lock:
+            return (
+                str(self.terminal_stop_category or ""),
+                str(self.terminal_failure_reason or ""),
+                str(self.terminal_stop_message or ""),
+            )
 
     @staticmethod
     def _normalize_distribution_counts(raw_counts: Any, option_count: int) -> List[int]:
@@ -516,6 +548,9 @@ if TYPE_CHECKING:
         cur_num: int
         cur_fail: int
         device_quota_fail_count: int
+        terminal_stop_category: str
+        terminal_failure_reason: str
+        terminal_stop_message: str
         thread_progress: Dict[str, ThreadProgressState]
         distribution_runtime_stats: Dict[str, Dict[str, Any]]
         distribution_pending_by_thread: Dict[str, List[Tuple[str, int, int]]]
@@ -530,6 +565,7 @@ if TYPE_CHECKING:
         _aliyun_captcha_popup_shown: bool
         _target_reached_stop_triggered: bool
         _target_reached_stop_lock: threading.Lock
+        _terminal_stop_lock: threading.Lock
         _proxy_fetch_lock: threading.Lock
 
         def get_browser_semaphore(self, max_instances: int) -> threading.Semaphore: ...
@@ -553,6 +589,15 @@ if TYPE_CHECKING:
         def increment_thread_success(self, thread_name: str, *, status_text: str = "提交成功") -> None: ...
         def increment_thread_fail(self, thread_name: str, *, status_text: str = "失败重试") -> None: ...
         def mark_thread_finished(self, thread_name: str, *, status_text: str = "已停止") -> None: ...
+        def mark_terminal_stop(
+            self,
+            category: str,
+            *,
+            failure_reason: str = "",
+            message: str = "",
+            overwrite: bool = False,
+        ) -> None: ...
+        def get_terminal_stop_snapshot(self) -> Tuple[str, str, str]: ...
         def snapshot_distribution_stats(self, stat_key: str, option_count: int) -> Tuple[int, List[int]]: ...
         def reset_pending_distribution(self, thread_name: Optional[str] = None) -> None: ...
         def append_pending_distribution_choice(

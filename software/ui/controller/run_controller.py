@@ -222,6 +222,7 @@ class RunController(
     threadProgressUpdated = Signal(dict)
     pauseStateChanged = Signal(bool, str)
     cleanupFinished = Signal()
+    quickBugReportSuggested = Signal()
     runtimeUiStateChanged = Signal(dict)
     randomIpLoadingChanged = Signal(bool, str)
     _uiCallbackQueued = Signal()
@@ -255,6 +256,7 @@ class RunController(
         self._completion_cleanup_done = False
         self._cleanup_scheduled = False
         self._stopped_by_stop_run = False
+        self._quick_feedback_prompt_emitted = False
         self._starting = False
         self._initializing = False
         self._init_stage_text = ""

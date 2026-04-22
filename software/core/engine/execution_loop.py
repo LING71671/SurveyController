@@ -95,6 +95,11 @@ class ExecutionLoop:
                             self.state.update_thread_status(thread_name, "本机环境阻止浏览器启动", running=False)
                         except Exception:
                             logging.info("更新线程状态失败：本机环境阻止浏览器启动", exc_info=True)
+                        self.state.mark_terminal_stop(
+                            "browser_environment",
+                            failure_reason=FailureReason.BROWSER_START_FAILED.value,
+                            message=friendly_error,
+                        )
                         if not stop_signal.is_set():
                             stop_signal.set()
                         break
@@ -251,6 +256,11 @@ class ExecutionLoop:
             except AIRuntimeError as exc:
                 driver_had_error = True
                 logging.error("AI 填空失败，已停止任务：%s", exc, exc_info=True)
+                self.state.mark_terminal_stop(
+                    "ai_runtime",
+                    failure_reason=FailureReason.FILL_FAILED.value,
+                    message=str(exc),
+                )
                 if not stop_signal.is_set():
                     stop_signal.set()
                 break

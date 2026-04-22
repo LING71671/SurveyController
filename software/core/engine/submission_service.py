@@ -89,6 +89,11 @@ class SubmissionService:
         fallback_message = "提交命中平台安全验证，当前版本暂不支持自动处理"
         message = _provider_submission_validation_message(driver, provider=survey_provider) or fallback_message
         logging.warning("%s", message)
+        self.state.mark_terminal_stop(
+            "submission_verification",
+            failure_reason=FailureReason.SUBMISSION_VERIFICATION_REQUIRED.value,
+            message=message,
+        )
         stopped = self.stop_policy.record_failure(
             stop_signal,
             thread_name=thread_name,

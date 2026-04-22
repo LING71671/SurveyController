@@ -6,7 +6,7 @@
   [![Contributors](https://img.shields.io/github/contributors/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/graphs/contributors)
   [![GitHub Release](https://img.shields.io/github/v/release/hungryM0/SurveyController?style=flat&logo=github&color=blue)](https://github.com/hungryM0/SurveyController/releases/latest)
   [![Status](https://status.hungrym0.top/api/badge/12/status)](https://status.hungrym0.top/status/surveycontroller)
-  [![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)]
+  ![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)
   [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
   [![Issues](https://img.shields.io/github/issues/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/issues)
   [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
@@ -119,6 +119,9 @@ python SurveyController.py
   </a>
   <a href="https://github.com/Moyuin-aka">
     <img src="https://github.com/Moyuin-aka.png" width="50" height="50" alt="Moyuin-aka" style="border-radius: 50%;" />
+  </a>
+  <a href="https://github.com/zioug">
+    <img src="https://github.com/zioug.png" width="50" height="50" alt="zioug" style="border-radius: 50%;" />
   </a>
 </div>
 
