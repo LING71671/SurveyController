@@ -108,6 +108,7 @@ class ContactForm(
         form_layout.setContentsMargins(0, 0, 0, 0)
 
         LABEL_WIDTH = 75
+        COMPACT_FIELD_WIDTH = 320
 
         # 1. 消息类型
         type_row = QHBoxLayout()
@@ -115,11 +116,11 @@ class ContactForm(
         self.type_label_static.setFixedWidth(LABEL_WIDTH)
         self.type_combo = ComboBox(self)
         self.type_locked_label = BodyLabel("", self)
-        self.type_locked_label.setMinimumWidth(160)
+        self.type_locked_label.setFixedWidth(COMPACT_FIELD_WIDTH)
         self.base_options = ["报错反馈", REQUEST_MESSAGE_TYPE, "新功能建议", "纯聊天"]
         for item in self.base_options:
             self.type_combo.addItem(item, item)
-        self.type_combo.setMinimumWidth(160)
+        self.type_combo.setFixedWidth(COMPACT_FIELD_WIDTH)
         type_row.addWidget(self.type_label_static)
         type_row.addWidget(self.type_combo)
         type_row.addWidget(self.type_locked_label)
@@ -158,13 +159,14 @@ class ContactForm(
         self.verify_send_spinner.hide()
 
         title_row = QHBoxLayout()
+        title_row.setSpacing(6)
         self.issue_title_label = BodyLabel("反馈标题：", self)
         self.issue_title_label.setFixedWidth(LABEL_WIDTH)
         self.issue_title_edit = LineEdit(self)
-        self.issue_title_edit.setPlaceholderText("可选，留空则自动生成")
+        self.issue_title_edit.setPlaceholderText("可选")
         self.issue_title_edit.setClearButtonEnabled(True)
         self.issue_title_edit.setMaxLength(60)
-        self.issue_title_edit.setMaximumWidth(360)
+        self.issue_title_edit.setFixedWidth(COMPACT_FIELD_WIDTH)
         title_row.addWidget(self.issue_title_label)
         title_row.addWidget(self.issue_title_edit)
         title_row.addStretch(1)

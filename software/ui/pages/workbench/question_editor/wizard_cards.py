@@ -236,11 +236,23 @@ class WizardCardsMixin:
         box.yesButton.setText("知道了")
         box.cancelButton.hide()
         self._validation_error_dialog = box
-        box.finished.connect(lambda *_args: setattr(self, "_validation_error_dialog", None))
-        box.destroyed.connect(lambda *_args: setattr(self, "_validation_error_dialog", None))
+        box.finished.connect(self._clear_validation_error_dialog_ref)
+        box.destroyed.connect(self._clear_validation_error_dialog_ref)
         if focus_widget is not None:
-            box.finished.connect(lambda *_args, widget=focus_widget: QTimer.singleShot(0, widget.setFocus))
+            box.finished.connect(self._restore_validation_focus)
+            box.setProperty("_focus_widget_after_validation_error", focus_widget)
         box.open()
+
+    def _clear_validation_error_dialog_ref(self, *_args) -> None:
+        self._validation_error_dialog = None
+
+    def _restore_validation_focus(self, *_args) -> None:
+        dialog = cast(Any, self).sender()
+        if dialog is None:
+            return
+        widget = dialog.property("_focus_widget_after_validation_error")
+        if isinstance(widget, QWidget):
+            QTimer.singleShot(0, widget.setFocus)
     def _validate_random_integer_inputs(self) -> bool:
         for idx, mode in self.text_random_mode_map.items():
             if str(mode or "").strip().lower() != "integer":

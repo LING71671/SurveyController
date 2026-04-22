@@ -154,9 +154,12 @@ class ConfigDrawer(QWidget):
             box.yesButton.setText("知道了")
             box.cancelButton.hide()
             self._folder_error_box = box
-            box.finished.connect(lambda *_args: setattr(self, "_folder_error_box", None))
-            box.destroyed.connect(lambda *_args: setattr(self, "_folder_error_box", None))
+            box.finished.connect(self._clear_folder_error_box_ref)
+            box.destroyed.connect(self._clear_folder_error_box_ref)
             box.open()
+
+    def _clear_folder_error_box_ref(self, *_args) -> None:
+        self._folder_error_box = None
 
     def _apply_theme(self):
         if isDarkTheme():

@@ -85,6 +85,16 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
             current[:] = alive
         return alive
 
+    def _get_signal_callback_store(self) -> dict[int, tuple[Any, Any]]:
+        store = getattr(self, "_surveycontroller_signal_callbacks", None)
+        if not isinstance(store, dict):
+            store = {}
+            setattr(self, "_surveycontroller_signal_callbacks", store)
+        return store
+
+    def _drop_signal_callbacks(self, info_bar) -> None:
+        _get_signal_callback_store(self).pop(id(info_bar), None)
+
     def _safe_add(self, info_bar) -> None:
         try:
             parent = info_bar.parent()
@@ -129,8 +139,19 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
                 pass
             return
 
-        info_bar.closedSignal.connect(lambda: _safe_remove(self, info_bar))
-        info_bar.destroyed.connect(lambda *_args, p=parent: _prune_invalid_bars(self, p))
+        bar_key = id(info_bar)
+
+        def _on_closed() -> None:
+            _safe_remove(self, info_bar)
+            _drop_signal_callbacks(self, info_bar)
+
+        def _on_destroyed(*_args, p=parent, _key=bar_key) -> None:
+            _prune_invalid_bars(self, p)
+            _get_signal_callback_store(self).pop(_key, None)
+
+        _get_signal_callback_store(self)[bar_key] = (_on_closed, _on_destroyed)
+        info_bar.closedSignal.connect(_on_closed)
+        info_bar.destroyed.connect(_on_destroyed)
 
         try:
             slide_ani.start()
@@ -164,6 +185,7 @@ def _install_infobar_manager_guards(info_bar_manager_cls) -> None:
             return
 
         bars.remove(info_bar)
+        _drop_signal_callbacks(self, info_bar)
 
         if _is_alive(info_bar):
             try:

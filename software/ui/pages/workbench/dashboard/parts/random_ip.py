@@ -277,11 +277,14 @@ class DashboardRandomIPMixin:
         )
         if str(default_type or "").strip() == "报错反馈":
             self._contact_dialog = dlg
-            dlg.finished.connect(lambda *_args: setattr(self, "_contact_dialog", None))
-            dlg.destroyed.connect(lambda *_args: setattr(self, "_contact_dialog", None))
+            dlg.finished.connect(self._clear_dashboard_contact_dialog_ref)
+            dlg.destroyed.connect(self._clear_dashboard_contact_dialog_ref)
             dlg.open()
             return False
         return dlg.exec() == QDialog.DialogCode.Accepted
+
+    def _clear_dashboard_contact_dialog_ref(self, *_args) -> None:
+        self._contact_dialog = None
 
     def _on_request_quota_clicked(self):
         """用户主动打开额度申请表单。"""

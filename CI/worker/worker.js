@@ -50,7 +50,10 @@ function normalizeMessageType(rawType, message) {
 }
 
 function extractVersionFromMessage(message) {
-  return extractMessageLineValue(message, "来源：SurveyController v");
+  return (
+    extractMessageLineValue(message, "来源：SurveyController v") ||
+    extractMessageLineValue(message, "版本号：SurveyController v")
+  );
 }
 
 function stripEmailLine(message) {
@@ -71,15 +74,77 @@ function sanitizeIssueTitle(title) {
   return title.replace(/\s+/g, " ").trim().slice(0, 60);
 }
 
-function formatIssueTimestamp(rawTimestamp) {
-  const parsed = typeof rawTimestamp === "string" ? new Date(rawTimestamp) : new Date();
-  const date = Number.isNaN(parsed.getTime()) ? new Date() : parsed;
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day} ${hour}:${minute}`;
+function extractIssueTitleFromMessage(message) {
+  return extractMessageLineValue(message, "反馈标题：");
+}
+
+function extractIssueMessageContent(message) {
+  if (typeof message !== "string" || !message.trim()) {
+    return "";
+  }
+
+  const sanitizedMessage = stripEmailLine(message);
+  const match = sanitizedMessage.match(/(?:^|\n)消息：([\s\S]*)$/);
+  if (match) {
+    return match[1].trim();
+  }
+
+  return sanitizedMessage.trim();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function isGitHubLogFile(file) {
+  const fileName = typeof file?.name === "string" ? file.name.toLowerCase() : "";
+  return fileName === "fatal_crash.log" || (fileName.startsWith("bug_report_log_") && fileName.endsWith(".txt"));
+}
+
+async function buildGitHubLogSections(files) {
+  if (!Array.isArray(files) || files.length === 0) {
+    return [];
+  }
+
+  const sections = [];
+  for (const file of files) {
+    if (!isGitHubLogFile(file)) {
+      continue;
+    }
+
+    let text = "";
+    try {
+      text = await file.text();
+    } catch {
+      text = "";
+    }
+
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      continue;
+    }
+
+    const truncated = trimmedText.length > 20000;
+    const displayText = truncated ? `${trimmedText.slice(0, 20000)}\n\n[日志内容过长，已截断]` : trimmedText;
+    sections.push(
+      [
+        "<details>",
+        `<summary>报错日志：${escapeHtml(file.name || "未命名日志")}</summary>`,
+        "",
+        "<pre><code>",
+        escapeHtml(displayText),
+        "</code></pre>",
+        "</details>",
+      ].join("\n"),
+    );
+  }
+
+  return sections;
 }
 
 function buildGitHubIssueTitle({ issueTitle, message, userId, timestamp }) {
@@ -88,25 +153,28 @@ function buildGitHubIssueTitle({ issueTitle, message, userId, timestamp }) {
     return explicitTitle;
   }
 
-  const parts = ["[报错反馈]"];
-  const version = extractVersionFromMessage(message);
-  if (version) {
-    parts.push(`v${version}`);
+  const extractedTitle = sanitizeIssueTitle(extractIssueTitleFromMessage(message));
+  if (extractedTitle) {
+    return extractedTitle;
   }
-  if (userId) {
-    parts.push(`UID ${userId}`);
-  }
-  parts.push(formatIssueTimestamp(timestamp));
-  return parts.join(" ");
+
+  return "未命名报错反馈";
 }
 
-function buildGitHubIssueBody({ message, files }) {
-  const sanitizedMessage = stripEmailLine(message);
-  const lines = [sanitizedMessage || "未提供正文"];
-  lines.push("", "> 此 Issue 由 SurveyController 客户端自动创建。");
-  if (Array.isArray(files) && files.length > 0) {
-    lines.push(`> 本次反馈包含 ${files.length} 个附件，附件仅同步到 Telegram。`);
+async function buildGitHubIssueBody({ message, files }) {
+  const version = extractVersionFromMessage(message);
+  const issueMessage = extractIssueMessageContent(message);
+  const logSections = await buildGitHubLogSections(files);
+
+  const lines = [];
+  if (version) {
+    lines.push(`版本号：SurveyController v${version}`);
   }
+  lines.push("消息内容：", issueMessage || "未提供正文");
+  if (logSections.length > 0) {
+    lines.push("", ...logSections);
+  }
+
   return lines.join("\n");
 }
 
@@ -129,7 +197,7 @@ async function createGitHubIssue(env, payload) {
     },
     body: JSON.stringify({
       title: buildGitHubIssueTitle(payload),
-      body: buildGitHubIssueBody(payload),
+      body: await buildGitHubIssueBody(payload),
     }),
   });
 

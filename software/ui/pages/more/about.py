@@ -337,9 +337,12 @@ class AboutPage(ScrollArea):
         from software.ui.dialogs.terms_of_service import TermsOfServiceDialog
         dlg = TermsOfServiceDialog(self.window())
         self._terms_dialog = dlg
-        dlg.finished.connect(lambda *_args: setattr(self, "_terms_dialog", None))
-        dlg.destroyed.connect(lambda *_args: setattr(self, "_terms_dialog", None))
+        dlg.finished.connect(self._clear_terms_dialog_ref)
+        dlg.destroyed.connect(self._clear_terms_dialog_ref)
         dlg.open()
+
+    def _clear_terms_dialog_ref(self, *_args) -> None:
+        self._terms_dialog = None
 
 
 
