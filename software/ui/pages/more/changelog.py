@@ -2,7 +2,7 @@
 import threading
 from datetime import datetime
 
-from PySide6.QtCore import Signal, Qt, QSize, QTimer
+from PySide6.QtCore import Signal, Qt, QSize, QTimer, Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy
 from qfluentwidgets import (
     ScrollArea,
@@ -101,7 +101,7 @@ class _ChangelogListPage(ScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._releasesLoaded.connect(self._on_releases_loaded)
+        self._releasesLoaded.connect(self._on_releases_loaded, Qt.ConnectionType.QueuedConnection)
         self.view = QWidget(self)
         self.setWidget(self.view)
         self.setWidgetResizable(True)
@@ -150,6 +150,7 @@ class _ChangelogListPage(ScrollArea):
 
         threading.Thread(target=_do_load, daemon=True).start()
 
+    @Slot(list)
     def _on_releases_loaded(self, releases: list):
         self.spinner.hide()
 

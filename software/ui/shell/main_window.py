@@ -7,7 +7,7 @@ import os
 import sys
 from typing import Any, Dict, List
 
-from PySide6.QtCore import Qt, QTimer, Signal, QEvent
+from PySide6.QtCore import Qt, QTimer, Signal, QEvent, Slot
 from PySide6.QtGui import QIcon, QGuiApplication, QColor
 from PySide6.QtWidgets import QDialog
 from qfluentwidgets import (
@@ -300,10 +300,10 @@ class MainWindow(
 
     def closeEvent(self, e):
         """窗口关闭时询问用户是否保存配置"""
-        self._cleanup_runtime_resources_on_close()
         if not self._confirm_close_with_optional_save():
             e.ignore()
             return
+        self._cleanup_runtime_resources_on_close()
         super().closeEvent(e)
 
     def _init_community_hint_badge_state(self):
@@ -445,8 +445,14 @@ class MainWindow(
             self.show()
 
     def _bind_controller_signals(self):
-        self.controller.surveyParsed.connect(self._on_survey_parsed)
-        self.controller.surveyParseFailed.connect(self._on_survey_parse_failed)
+        self.controller.surveyParsed.connect(
+            self._on_survey_parsed,
+            Qt.ConnectionType.QueuedConnection,
+        )
+        self.controller.surveyParseFailed.connect(
+            self._on_survey_parse_failed,
+            Qt.ConnectionType.QueuedConnection,
+        )
         self.controller.runFailed.connect(lambda msg: self._toast(msg, "error"))
         self.controller.runStateChanged.connect(self.dashboard.on_run_state_changed)
         self.controller.statusUpdated.connect(self.dashboard.update_status)
@@ -474,6 +480,7 @@ class MainWindow(
         register_popup_handler(handler)
 
     # ---------- controller callbacks ----------
+    @Slot(list, str)
     def _on_survey_parsed(self, info: List[Dict[str, Any]], title: str):
         parsed_title = title or "问卷"
         self.strategy_page.set_questions_info(info or [])
@@ -493,6 +500,7 @@ class MainWindow(
         self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)
         self.dashboard.update_question_meta(parsed_title, len(self.controller.question_entries))
 
+    @Slot(str)
     def _on_survey_parse_failed(self, msg: str):
         text = str(msg or "").strip()
         if "问卷已暂停" in text:

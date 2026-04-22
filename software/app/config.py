@@ -407,7 +407,7 @@ _ENGLISH_MULTI_MIN_PATTERNS = (
 # ==================== 下载源配置 ====================
 DOWNLOAD_SOURCES = {
     "official": {
-        "label": "官方服务器",
+        "label": "官方服务器（推荐）",
         "api_prefix": "",  # API 不修改
         "download_prefix": "",  # 不使用前缀拼接
         "direct_download_url": "https://dl.hungrym0.top/SurveyController_latest_setup.exe",
@@ -418,7 +418,7 @@ DOWNLOAD_SOURCES = {
         "download_prefix": "",  # 不修改下载地址
     },
     "ghfast": {
-        "label": "ghfast.top 镜像 (推荐)",
+        "label": "ghfast.top 镜像",
         "api_prefix": "",
         "download_prefix": "https://ghfast.top/",
     },

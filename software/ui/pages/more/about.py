@@ -7,7 +7,7 @@ from software.logging.action_logger import log_action
 from software.logging.log_utils import log_suppressed_exception
 
 
-from PySide6.QtCore import Signal, Qt
+from PySide6.QtCore import Signal, Qt, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QWidget,
@@ -47,8 +47,8 @@ class AboutPage(ScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._updateCheckFinished.connect(self._on_update_result)
-        self._updateCheckError.connect(self._on_update_error)
+        self._updateCheckFinished.connect(self._on_update_result, Qt.ConnectionType.QueuedConnection)
+        self._updateCheckError.connect(self._on_update_error, Qt.ConnectionType.QueuedConnection)
 
         self.view = QWidget(self)
         self.view.setObjectName('view')
@@ -251,6 +251,7 @@ class AboutPage(ScrollArea):
             self.update_btn.setText("检查更新")
             self.update_spinner.hide()
 
+    @Slot(object)
     def _on_update_result(self, update_info):
         """处理更新检查结果（在主线程中执行）"""
         self._set_update_loading(False)
@@ -277,6 +278,7 @@ class AboutPage(ScrollArea):
         else:
             InfoBar.warning("", "检查更新失败，请检查网络连接后重试", parent=win, position=InfoBarPosition.TOP, duration=4000)
 
+    @Slot(str)
     def _on_update_error(self, error_msg: str):
         """处理更新检查错误（在主线程中执行）"""
         self._set_update_loading(False)
@@ -300,7 +302,7 @@ class AboutPage(ScrollArea):
 
     def _load_publish_time(self):
         """异步加载当前版本的发布时间"""
-        self._publishTimeLoaded.connect(self._on_publish_time_loaded)
+        self._publishTimeLoaded.connect(self._on_publish_time_loaded, Qt.ConnectionType.QueuedConnection)
         
         def _do_load():
             try:
@@ -318,6 +320,7 @@ class AboutPage(ScrollArea):
         
         threading.Thread(target=_do_load, daemon=True).start()
 
+    @Slot(str)
     def _on_publish_time_loaded(self, time_str: str):
         """更新发布时间标签"""
         self.publish_time_label.setText(f"({time_str})")

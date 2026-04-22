@@ -16,7 +16,7 @@ from software.ui.helpers.proxy_access import (
     has_authenticated_session,
 )
 
-from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray
+from PySide6.QtCore import Qt, QPoint, QPointF, QDate, QDateTime, QTime, Signal, QRectF, QPropertyAnimation, QEasingCurve, Property, QTimer, QByteArray, Slot
 from typing import Any
 from PySide6.QtCharts import QChart, QLineSeries, QChartView, QValueAxis, QDateTimeAxis
 from PySide6.QtGui import QPainter, QPen, QColor, QBrush
@@ -388,8 +388,8 @@ class IpUsagePage(ScrollArea):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._dataLoaded.connect(self._on_data_loaded)
-        self._bonusClaimFinished.connect(self._on_bonus_claim_finished)
+        self._dataLoaded.connect(self._on_data_loaded, Qt.ConnectionType.QueuedConnection)
+        self._bonusClaimFinished.connect(self._on_bonus_claim_finished, Qt.ConnectionType.QueuedConnection)
         self._load_requested_once = False
         self._last_load_failed = False
         self._load_scheduled = False
@@ -556,6 +556,7 @@ class IpUsagePage(ScrollArea):
 
         threading.Thread(target=_do, daemon=True).start()
 
+    @Slot(object, str)
     def _on_data_loaded(self, payload: Any, error: str):
         self._set_loading(False)
         self._last_load_failed = bool(error)
@@ -796,6 +797,7 @@ class IpUsagePage(ScrollArea):
         finally:
             self._bonusClaimFinished.emit(payload)
 
+    @Slot(object)
     def _on_bonus_claim_finished(self, payload: Any) -> None:
         self._bonus_claim_in_progress = False
         if isinstance(payload, dict) and "mark_confetti_played" in payload:

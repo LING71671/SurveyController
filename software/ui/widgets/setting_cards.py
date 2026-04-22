@@ -2,6 +2,7 @@
 
 from PySide6.QtCore import Qt
 from qfluentwidgets import (
+    ComboBox,
     IndicatorPosition,
     SettingCard,
     SwitchButton,
@@ -67,4 +68,15 @@ class SwitchSettingCard(SettingCard):
 
     def blockSignals(self, b):
         return self.switchButton.blockSignals(b)
+
+
+class ComboSettingCard(SettingCard):
+    """带下拉框的设置卡。"""
+
+    def __init__(self, icon, title, content, min_width: int = 180, parent=None):
+        super().__init__(icon, title, content, parent)
+        self.comboBox = ComboBox(self)
+        self.comboBox.setMinimumWidth(max(120, int(min_width or 180)))
+        self.hBoxLayout.addWidget(self.comboBox, 0, Qt.AlignmentFlag.AlignRight)
+        self.hBoxLayout.addSpacing(16)
 

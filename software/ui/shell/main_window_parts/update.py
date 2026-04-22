@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,15 @@ class MainWindowUpdateMixin:
         _settings_page: Any
         _update_check_thread: Any
         _update_check_worker: Any
+
+    @staticmethod
+    def _is_preview_version() -> bool:
+        version_text = str(__VERSION__ or "").strip().lower()
+        if not version_text:
+            return False
+        if any(token in version_text for token in ("alpha", "beta", "rc", "pre", "preview", "dev")):
+            return True
+        return bool(re.search(r"\d(?:a|b)\d*$", version_text))
 
     def _check_update_on_startup(self):
         """根据设置在启动时检查更新（后台异步执行）"""
@@ -280,7 +290,7 @@ class MainWindowUpdateMixin:
 
     def _check_preview_version(self):
         """检查是否为预览版本，如果是则显示预览徽章"""
-        if "pre" in __VERSION__.lower():
+        if self._is_preview_version():
             self._show_preview_badge()
 
     def _show_preview_badge(self):

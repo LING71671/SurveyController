@@ -4,11 +4,12 @@ from __future__ import annotations
 import logging
 import math
 import threading
+import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QCoreApplication
 
-from software.app.config import STOP_FORCE_WAIT_SECONDS
+from software.app.config import STOP_FORCE_WAIT_SECONDS, app_settings, get_bool_from_qsettings
 from software.core.engine.runner import run
 from software.core.questions.config import configure_probabilities, validate_question_config
 from software.core.task import EVENT_TASK_STARTED, EVENT_TASK_STOPPED, ExecutionConfig, ExecutionState, ProxyLease
@@ -51,8 +52,11 @@ class RunControllerExecutionMixin:
         _init_completed_steps: set[str]
         _init_current_step_key: str
         _init_gate_stop_event: Optional[threading.Event]
+        _init_gate_thread: Optional[threading.Thread]
+        _monitor_thread: Optional[threading.Thread]
         _pending_execution_config: Optional[ExecutionConfig]
         _execution_state: Optional[ExecutionState]
+        _sleep_blocker: Any
         survey_provider: str
         question_entries: List[Any]
         questions_info: List[Dict[str, Any]]
@@ -100,6 +104,24 @@ class RunControllerExecutionMixin:
             adapter=_adapter,
         )
         return adapter
+
+    def _should_prevent_sleep_during_run(self) -> bool:
+        settings = app_settings()
+        return get_bool_from_qsettings(settings.value("prevent_sleep_during_run"), True)
+
+    def _apply_sleep_blocker_for_run_start(self) -> None:
+        if not self._should_prevent_sleep_during_run():
+            return
+        try:
+            self._sleep_blocker.acquire()
+        except Exception:
+            logging.warning("启用阻止自动休眠失败", exc_info=True)
+
+    def _release_sleep_blocker(self) -> None:
+        try:
+            self._sleep_blocker.release()
+        except Exception:
+            logging.warning("恢复自动休眠状态失败", exc_info=True)
     def _dispatch_to_ui(self, callback: Callable[[], Any]):
         if QCoreApplication.instance() is None:
             try:
@@ -215,6 +237,7 @@ class RunControllerExecutionMixin:
 
         self.config.headless_mode = bool(getattr(config, "headless_mode", False))
         self.config.threads = max(1, int(config.threads or 1))
+        self._apply_sleep_blocker_for_run_start()
         self.running = True
         self._starting = False
         if emit_run_state:
@@ -249,12 +272,16 @@ class RunControllerExecutionMixin:
             daemon=True,
             name="Monitor",
         )
+        self._monitor_thread = monitor
         monitor.start()
         logging.debug("任务启动完成，监控线程已启动")
     def _wait_for_threads(self, adapter_snapshot: Optional[Any] = None):
-        for t in self.worker_threads:
-            t.join()
-        self._on_run_finished(adapter_snapshot)
+        try:
+            for t in self.worker_threads:
+                t.join()
+            self._on_run_finished(adapter_snapshot)
+        finally:
+            self._monitor_thread = None
     def _on_run_finished(self, adapter_snapshot: Optional[Any] = None):
         if threading.current_thread() is not threading.main_thread():
             self._dispatch_to_ui_async(lambda: self._on_run_finished(adapter_snapshot))
@@ -263,6 +290,7 @@ class RunControllerExecutionMixin:
         already_stopped = getattr(self, "_stopped_by_stop_run", False)
         self._stopped_by_stop_run = False
         self._status_timer.stop()
+        self._release_sleep_blocker()
         _event_bus.emit(EVENT_TASK_STOPPED)
         if not already_stopped:
             self.running = False
@@ -319,6 +347,7 @@ class RunControllerExecutionMixin:
                 self.adapter.resume_run()
         except Exception:
             logging.debug("停止时恢复暂停状态失败", exc_info=True)
+        self._release_sleep_blocker()
         self._schedule_cleanup()
         if self._paused_state:
             self._paused_state = False
@@ -327,6 +356,59 @@ class RunControllerExecutionMixin:
         self._stopped_by_stop_run = True
         self.runStateChanged.emit(False)
         self._emit_status()
+    def _collect_shutdown_threads(self) -> List[threading.Thread]:
+        seen: set[int] = set()
+        threads: List[threading.Thread] = []
+        for candidate in [getattr(self, "_init_gate_thread", None), *list(self.worker_threads or []), getattr(self, "_monitor_thread", None)]:
+            if not isinstance(candidate, threading.Thread):
+                continue
+            identifier = id(candidate)
+            if identifier in seen:
+                continue
+            seen.add(identifier)
+            threads.append(candidate)
+        return threads
+    def shutdown_for_close(self, timeout_seconds: float = 5.0) -> bool:
+        self._cleanup_scheduled = True
+        self.stop_run()
+
+        deadline = time.monotonic() + max(0.0, float(timeout_seconds or 0.0))
+        current = threading.current_thread()
+        pending = [thread for thread in self._collect_shutdown_threads() if thread is not current]
+
+        while True:
+            alive = [thread for thread in pending if thread.is_alive()]
+            if not alive:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logging.warning(
+                    "关闭窗口时仍有后台线程未退出：%s",
+                    ", ".join(thread.name or "UnnamedThread" for thread in alive),
+                )
+                break
+            slice_timeout = min(0.1, remaining)
+            for thread in alive:
+                thread.join(timeout=slice_timeout)
+            app = QCoreApplication.instance()
+            if app is not None and threading.current_thread() is threading.main_thread():
+                try:
+                    app.processEvents()
+                except Exception:
+                    logging.debug("关闭等待期间处理事件失败", exc_info=True)
+
+        try:
+            if self.adapter:
+                self.adapter.cleanup_browsers()
+        except Exception:
+            logging.warning("关闭窗口时执行浏览器兜底清理失败", exc_info=True)
+
+        self.worker_threads = [thread for thread in self.worker_threads if thread.is_alive()]
+        if self._monitor_thread is not None and not self._monitor_thread.is_alive():
+            self._monitor_thread = None
+        if self._init_gate_thread is not None and not self._init_gate_thread.is_alive():
+            self._init_gate_thread = None
+        return not any(thread.is_alive() for thread in pending)
     def resume_run(self):
         """Resume execution after a pause (does not restart threads)."""
         if not self.running:

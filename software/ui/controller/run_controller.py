@@ -17,6 +17,7 @@ from software.ui.controller.run_controller_parts import (
 )
 from software.core.engine.cleanup import CleanupRunner
 from software.io.config import RuntimeConfig
+from software.system import SystemSleepBlocker
 
 
 class BoolVar:
@@ -186,8 +187,25 @@ class EngineGuiAdapter:
     def cleanup_browsers(self) -> None:
         drivers = list(self.active_drivers or [])
         self.active_drivers.clear()
+        cleaned = 0
+        seen: set[int] = set()
+        for driver in drivers:
+            identifier = id(driver)
+            if identifier in seen:
+                continue
+            seen.add(identifier)
+            try:
+                mark_cleanup_done = getattr(driver, "mark_cleanup_done", None)
+                if callable(mark_cleanup_done) and not mark_cleanup_done():
+                    continue
+                quit_driver = getattr(driver, "quit", None)
+                if callable(quit_driver):
+                    quit_driver()
+                    cleaned += 1
+            except Exception:
+                logging.warning("[兜底清理] 强制关闭浏览器失败", exc_info=True)
         if drivers:
-            logging.info("[兜底清理] 已清理 %d 个 driver 跟踪引用，底座关闭由工作线程负责", len(drivers))
+            logging.info("[兜底清理] 已强制关闭 %d/%d 个 driver 实例", cleaned, len(seen))
 
 
 class RunController(
@@ -217,6 +235,8 @@ class RunController(
         self.survey_provider = "wjx"
         self.stop_event = threading.Event()
         self.worker_threads: List[threading.Thread] = []
+        self._monitor_thread: Optional[threading.Thread] = None
+        self._init_gate_thread: Optional[threading.Thread] = None
         self._execution_state: Optional[ExecutionState] = None
         self._cleanup_runner = CleanupRunner()
         self.on_ip_counter: Optional[Callable[[float, float, bool], None]] = None
@@ -226,6 +246,7 @@ class RunController(
         self.confirm_dialog_handler: Optional[Callable[[str, str], bool]] = None
         self._engine_adapter_cls = EngineGuiAdapter
         self.adapter = self._create_adapter(self.stop_event, random_ip_enabled=False)
+        self._sleep_blocker = SystemSleepBlocker()
         self.running = False
         self._paused_state = False
         self._status_timer = QTimer(self)

@@ -22,6 +22,7 @@ class MainWindowLifecycleMixin:
         _boot_splash: Any
         _log_page: Any
         _support_page: Any
+        _random_ip_quota_auto_sync_timer: Any
         _skip_save_on_close: bool
         _base_window_title: str
         dashboard: Any
@@ -33,6 +34,16 @@ class MainWindowLifecycleMixin:
         def _stop_update_check_worker(self) -> None: ...
 
     def _cleanup_runtime_resources_on_close(self) -> None:
+        try:
+            self._random_ip_quota_auto_sync_timer.stop()
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: self._random_ip_quota_auto_sync_timer.stop()", exc)
+
+        try:
+            self.controller.shutdown_for_close(timeout_seconds=5.0)
+        except Exception as exc:
+            log_suppressed_exception("closeEvent: self.controller.shutdown_for_close()", exc)
+
         try:
             if self._boot_splash:
                 self._boot_splash.cleanup()
@@ -116,6 +127,16 @@ class MainWindowLifecycleMixin:
 
         if reply == 0 or not reply:
             return False
+
+        try:
+            if (
+                bool(getattr(self.controller, "running", False))
+                or bool(getattr(self.controller, "_starting", False))
+                or bool(getattr(self.controller, "is_initializing", lambda: False)())
+            ):
+                self.controller.shutdown_for_close(timeout_seconds=5.0)
+        except Exception as exc:
+            log_suppressed_exception("_confirm_close_with_optional_save: self.controller.shutdown_for_close()", exc, level=logging.WARNING)
 
         if reply == 1 or reply is True:
             try:

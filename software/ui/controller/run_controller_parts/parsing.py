@@ -23,6 +23,8 @@ class RunControllerParsingMixin:
         survey_title: str
         survey_provider: str
 
+        def _dispatch_to_ui_async(self, callback: Any) -> None: ...
+
     # -------------------- Parsing --------------------
     def parse_survey(self, url: str):
         """Parse survey structure in a worker thread."""
@@ -35,32 +37,40 @@ class RunControllerParsingMixin:
             self.surveyParseFailed.emit("仅支持问卷星与腾讯问卷链接")
             return
 
+        def _apply_parse_success(definition: SurveyDefinition) -> None:
+            info = [q for q in definition.questions if not q.get("is_description")]
+            title = definition.title
+            provider = definition.provider
+            self.questions_info = info
+            self.question_entries = build_default_question_entries(
+                info,
+                survey_url=normalized_url,
+                existing_entries=self.question_entries,
+            )
+            self.config.url = normalized_url
+            self.config.survey_provider = provider
+            self.config.survey_title = title or ""
+            self.config.questions_info = list(info or [])
+            self.config.question_entries = list(self.question_entries or [])
+            self.survey_title = title or ""
+            self.survey_provider = provider
+            self.surveyParsed.emit(info, title or "")
+
+        def _apply_parse_failure(message: str) -> None:
+            self.surveyParseFailed.emit(str(message or "解析失败，请稍后重试"))
+
         def _worker():
             try:
                 definition = self._parse_questions(normalized_url)
-                info = [q for q in definition.questions if not q.get("is_description")]
-                title = definition.title
-                provider = definition.provider
-                self.questions_info = info
-                self.question_entries = build_default_question_entries(
-                    info,
-                    survey_url=normalized_url,
-                    existing_entries=self.question_entries,
+                self._dispatch_to_ui_async(
+                    lambda parsed_definition=definition: _apply_parse_success(parsed_definition)
                 )
-                self.config.url = normalized_url
-                self.config.survey_provider = provider
-                self.config.survey_title = title or ""
-                self.config.questions_info = list(info or [])
-                self.config.question_entries = list(self.question_entries or [])
-                self.survey_title = title or ""
-                self.survey_provider = provider
-                self.surveyParsed.emit(info, title or "")
             except Exception as exc:
                 logging.exception("解析问卷流程失败，url=%r", normalized_url)
                 friendly = str(exc) or "解析失败，请稍后重试"
-                self.surveyParseFailed.emit(friendly)
+                self._dispatch_to_ui_async(lambda msg=friendly: _apply_parse_failure(msg))
 
-        threading.Thread(target=_worker, daemon=True).start()
+        threading.Thread(target=_worker, daemon=True, name="SurveyParse").start()
 
     def _parse_questions(self, url: str) -> SurveyDefinition:
         from software.providers.registry import parse_survey

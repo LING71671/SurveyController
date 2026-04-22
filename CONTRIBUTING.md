@@ -74,7 +74,7 @@ software/
 │   ├── browser/           # 浏览器驱动
 │   └── proxy/             # 代理 API / 会话 / 策略 / 地区 / 代理池；session/auth.py 仅保留状态与入口，HTTP/归一化/模型拆到 session/client.py、normalize.py、models.py
 ├── providers/             # 平台识别、注册、分发总入口；contracts.py 统一 SurveyDefinition 契约，registry.py 负责 provider 对象分发
-├── system/                # Windows/系统级能力（安全存储、注册表）
+├── system/                # Windows/系统级能力（安全存储、注册表、电源管理）
 ├── ui/
 │   ├── shell/             # 主窗口、启动页、页面装配
 │   ├── controller/        # Qt 协调器；run_controller_parts/runtime.py 已拆成 runtime_constants.py、runtime_random_ip.py、runtime_init_gate.py、runtime_execution.py
@@ -83,7 +83,7 @@ software/
 │   │   └── qfluent_compat.py # QFluentWidgets 动画 / InfoBar 稳定性补丁
 │   ├── pages/
 │   │   ├── workbench/     # dashboard（page.py 负责首页骨架，parts/ 下含 survey_parse.py、config_io.py、run_actions.py）/question_editor（单栏配置向导已拆成 wizard_dialog.py + wizard_search.py + wizard_navigation.py + wizard_cards.py + wizard_sections_*.py）/runtime_panel/strategy（题目策略：条件规则 + 维度分组；dimension_panel.py 负责面板装配，dimension_sections.py 负责分组区块与跨表拖拽）/log_panel
-│   │   └── settings/      # 应用程序设置页；settings.py 负责页面骨架，group_widgets.py 放设置页专用右侧控件
+│   │   └── settings/      # 应用程序设置页；settings.py 负责页面骨架，统一复用 ui/widgets/setting_cards.py 中的卡片组件，不再保留 settings/group_widgets.py
 │   └── widgets/           # 通用组件（contact_form 已拆成包，widget.py 只做主组装，输入/附件/验证码/赞助/提交拆到 constants.py、inputs.py、attachments.py、verification.py、donation.py、submission.py；旧 time_range_slider 已移除）
 └── update/                # 更新检查与升级
 

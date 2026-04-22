@@ -43,6 +43,7 @@ class RunControllerInitializationMixin:
         _init_completed_steps: set[str]
         _init_current_step_key: str
         _init_gate_stop_event: Optional[threading.Event]
+        _init_gate_thread: Optional[threading.Thread]
         survey_title: str
         runStateChanged: Any
         statusUpdated: Any
@@ -241,12 +242,14 @@ class RunControllerInitializationMixin:
 
         gate_stop_event = threading.Event()
         self._init_gate_stop_event = gate_stop_event
-        threading.Thread(
+        gate_thread = threading.Thread(
             target=self._run_initialization_gate,
             args=(config, list(proxy_pool), gate_stop_event),
             daemon=True,
             name="InitGate",
-        ).start()
+        )
+        self._init_gate_thread = gate_thread
+        gate_thread.start()
     def _prepare_random_ip_resources(
         self,
         config: RuntimeConfig,

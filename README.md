@@ -4,7 +4,8 @@
   
   [![GitHub Stars](https://img.shields.io/github/stars/hungryM0/SurveyController?style=flat&logo=github&color=yellow)](https://github.com/hungryM0/SurveyController/stargazers)
   [![GitHub Forks](https://img.shields.io/github/forks/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/network/members)
-  [![Contributors](https://img.shields.io/github/contributors/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/graphs/contributors)[![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
+  [![Contributors](https://img.shields.io/github/contributors/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/graphs/contributors)
+  [![License](https://img.shields.io/github/license/hungryM0/SurveyController?style=flat&color=orange)](./LICENSE)
   [![Issues](https://img.shields.io/github/issues/hungryM0/SurveyController?style=flat&logo=github)](https://github.com/hungryM0/SurveyController/issues)
 
   
@@ -13,7 +14,8 @@
   [![Downloads](https://img.shields.io/github/downloads/hungryM0/SurveyController/total?style=flat&logo=github&color=green)](https://github.com/hungryM0/SurveyController/releases)
   [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 
-  <p><strong>一站式问卷自动化处理程序，支持问卷星与腾讯问卷平台，支持指定ip填写地区与信度系数、作答时长与分布比例。</strong></p>
+  <p><strong>一站式问卷自动化处理程序，适配问卷星与腾讯问卷平台</strong></p>
+  <p><strong>支持指定ip填写地区与信度系数、作答时长与分布比例。</strong></p>
 
 > 参考了 [Zemelee/wjx](https://github.com/Zemelee/wjx)，别忘了给这位大佬点个star
 
@@ -121,25 +123,6 @@ python SurveyController.py
   <a href="https://github.com/Moyuin-aka">
     <img src="https://github.com/Moyuin-aka.png" width="50" height="50" alt="Moyuin-aka" style="border-radius: 50%;" />
   </a>
-</div>
-
----
-
-## 捐助
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center">
-        <img width="200" alt="wechat" src="assets/WeDonate.png" /><br/>
-        <strong style="color: #07C160;">微信赞赏</strong>
-      </td>
-      <td align="center">
-        <img width="200" alt="alipay" src="assets/AliDonate.jpg" /><br/>
-        <strong style="color: #1677FF;">支付宝</strong>
-      </td>
-    </tr>
-  </table>
 </div>
 
 ---
