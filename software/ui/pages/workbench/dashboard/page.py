@@ -6,8 +6,8 @@ from software.logging.action_logger import bind_logged_action
 from software.logging.log_utils import log_suppressed_exception
 
 
-from PySide6.QtCore import Qt, QObject, QEvent, Signal
-from PySide6.QtGui import QContextMenuEvent
+from PySide6.QtCore import Qt, QObject, QEvent, Signal, QUrl
+from PySide6.QtGui import QContextMenuEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -41,7 +41,7 @@ from qfluentwidgets import (
 )
 from qfluentwidgets import RoundMenu
 
-from software.ui.pages.workbench.dashboard.cards import RuntimeSettingsHintCard
+from software.ui.pages.workbench.dashboard.cards import DashboardActionCard, RuntimeSettingsHintCard
 from software.ui.pages.workbench.dashboard.parts.clipboard import DashboardClipboardMixin
 from software.ui.pages.workbench.dashboard.parts.config_io import DashboardConfigIOMixin
 from software.ui.pages.workbench.dashboard.parts.entries import DashboardEntriesMixin
@@ -87,6 +87,7 @@ class DashboardPage(
 
     _ipBalanceChecked = Signal(float)  # 发送剩余IP数信号
     _randomIpHeartbeatUpdated = Signal(object)  # 发送随机IP服务状态信号
+    STATUS_PAGE_URL = "https://status.hungrym0.top/status/surveycontroller"
 
     def __init__(
         self,
@@ -278,8 +279,20 @@ class DashboardPage(
         random_ip_row.addWidget(self.random_ip_loading_label)
         random_ip_row.addStretch(1)
         left_column.addLayout(random_ip_row)
+        quick_action_column = QVBoxLayout()
+        quick_action_column.setContentsMargins(0, 0, 0, 0)
+        quick_action_column.setSpacing(8)
         self.runtime_settings_hint_card = RuntimeSettingsHintCard(exec_card)
-        left_column.addWidget(self.runtime_settings_hint_card)
+        quick_action_column.addWidget(self.runtime_settings_hint_card)
+        self.status_page_card = DashboardActionCard(
+            title="服务状态检查",
+            description="打开服务状态页，查看各服务可用性（仅供参考）",
+            button_text="前往",
+            icon=FluentIcon.GLOBE,
+            parent=exec_card,
+        )
+        quick_action_column.addWidget(self.status_page_card)
+        left_column.addLayout(quick_action_column)
         content_row.addLayout(left_column, 1)
         content_row.setAlignment(Qt.AlignmentFlag.AlignTop)
 
@@ -512,6 +525,15 @@ class DashboardPage(
             page="dashboard",
             forward_signal_args=False,
         )
+        bind_logged_action(
+            self.status_page_card.openRequested,
+            self._open_status_page,
+            scope="NAV",
+            event="open_status_page",
+            target="status_page_card",
+            page="dashboard",
+            forward_signal_args=False,
+        )
         self.controller.runtimeUiStateChanged.connect(self._apply_runtime_ui_state)
         self.controller.randomIpLoadingChanged.connect(self.set_random_ip_loading)
         # 监听剪贴板变化，自动处理粘贴的图片
@@ -556,6 +578,9 @@ class DashboardPage(
             running = bool(getattr(self.controller, "running", False))
         can_start = (not running) and self._has_question_entries()
         self.start_btn.setEnabled(bool(can_start))
+
+    def _open_status_page(self):
+        QDesktopServices.openUrl(QUrl(self.STATUS_PAGE_URL))
 
     def _on_question_entries_changed(self, _count: int):
         self.strategy_page.set_entries(self.question_page.entries, self.question_page.entry_questions_info)

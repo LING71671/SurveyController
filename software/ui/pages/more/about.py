@@ -205,15 +205,6 @@ class AboutPage(ScrollArea):
         contributors_layout.addStretch(1)
         credit_layout.addLayout(contributors_layout)
 
-        third_party_layout = QHBoxLayout()
-        third_party_layout.addWidget(BodyLabel("Third-party：", self))
-        pyside_link = HyperlinkButton("https://doc.qt.io/qtforpython-6/", "PySide6 (LGPL)", self)
-        qfw_link = HyperlinkButton("https://qfluentwidgets.com", "QFluentWidgets (GPLv3)", self)
-        third_party_layout.addWidget(pyside_link)
-        third_party_layout.addWidget(qfw_link)
-        third_party_layout.addStretch(1)
-        credit_layout.addLayout(third_party_layout)
-
         # 服务条款链接
         terms_layout = QHBoxLayout()
         terms_layout.addWidget(BodyLabel("服务条款与隐私声明：", self))
