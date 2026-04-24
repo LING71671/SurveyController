@@ -267,6 +267,8 @@ def configure_probabilities(
                     except Exception:
                         target_value = None
             target.slider_targets.append(50.0 if target_value is None else target_value)
+        elif entry.question_type == "order":
+            target.question_config_index_map[question_num] = ("order", -1)
         elif entry.question_type in ("text", "multi_text"):
             if not getattr(entry, "is_location", False):
                 target.question_config_index_map[question_num] = ("text", idx_text)
