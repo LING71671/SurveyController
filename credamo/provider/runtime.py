@@ -337,25 +337,54 @@ def _resolve_forced_choice_index(page: Any, root: Any, option_texts: List[str]) 
     return forced_index
 
 
-def _click_single_choice_at_index(page: Any, root: Any, target_index: int, inputs: List[Any], targets: List[Any]) -> bool:
-    if target_index < 0:
-        return False
-    if inputs and target_index < len(inputs):
-        target = inputs[target_index]
-        if _click_element(page, target) and _is_checked(page, target):
-            return True
-    if targets and target_index < len(targets):
-        target = targets[target_index]
-        if _click_element(page, target):
-            refreshed_inputs = _option_inputs(root, "radio")
-            if target_index < len(refreshed_inputs) and _is_checked(page, refreshed_inputs[target_index]):
-                return True
-            if not refreshed_inputs:
-                return True
-    if inputs and target_index < len(inputs):
-        target = inputs[target_index]
+def _single_choice_options(page: Any, root: Any) -> List[Tuple[Any, Any, str]]:
+    row_selectors = (
+        ".single-choice .choice-row",
+        ".single-choice .choice",
+        ".choice-row",
+        ".choice",
+    )
+    options: List[Tuple[Any, Any, str]] = []
+
+    for selector in row_selectors:
         try:
-            if bool(page.evaluate("el => { el.click(); return !!el.checked; }", target)):
+            rows = root.query_selector_all(selector)
+        except Exception:
+            rows = []
+        if not rows:
+            continue
+        for row in rows:
+            try:
+                input_element = row.query_selector("input[type='radio'], [role='radio']")
+            except Exception:
+                input_element = None
+            row_text = _element_text(page, row)
+            if input_element is None and not row_text:
+                continue
+            click_target = row if row is not None else input_element
+            if click_target is None:
+                continue
+            options.append((input_element, click_target, row_text))
+        if options:
+            return options
+
+    for input_element in _option_inputs(root, "radio"):
+        row_text = _element_text(page, input_element)
+        options.append((input_element, input_element, row_text))
+    return options
+
+
+def _click_single_choice_option(page: Any, option: Tuple[Any, Any, str]) -> bool:
+    input_element, click_target, _text = option
+    for candidate in (click_target, input_element):
+        if candidate is None:
+            continue
+        if _click_element(page, candidate):
+            if input_element is None or _is_checked(page, input_element):
+                return True
+    if input_element is not None:
+        try:
+            if bool(page.evaluate("el => { el.click(); return !!el.checked; }", input_element)):
                 return True
         except Exception:
             pass
@@ -363,19 +392,18 @@ def _click_single_choice_at_index(page: Any, root: Any, target_index: int, input
 
 
 def _answer_single_like(page: Any, root: Any, weights: Any, option_count: int) -> bool:
-    inputs = _option_inputs(root, "radio")
-    targets = _option_click_targets(root, "radio")
-    target_count = len(inputs) if inputs else len(targets)
+    del option_count
+    options = _single_choice_options(page, root)
+    target_count = len(options)
     if target_count <= 0:
         return False
-    forced_source = targets if targets else inputs
-    forced_option_texts = [_element_text(page, item) for item in forced_source]
+    forced_option_texts = [text for _input, _target, text in options]
     forced_index = _resolve_forced_choice_index(page, root, forced_option_texts)
-    if forced_index is not None and _click_single_choice_at_index(page, root, forced_index, inputs, targets):
+    if forced_index is not None and forced_index < target_count and _click_single_choice_option(page, options[forced_index]):
         return True
     probabilities = normalize_droplist_probs(weights, target_count)
     target_index = weighted_index(probabilities)
-    return _click_single_choice_at_index(page, root, min(target_index, target_count - 1), inputs, targets)
+    return _click_single_choice_option(page, options[min(target_index, target_count - 1)])
 
 
 def _positive_multiple_indexes(weights: Any, option_count: int) -> List[int]:
