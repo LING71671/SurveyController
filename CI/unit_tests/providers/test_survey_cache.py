@@ -123,6 +123,50 @@ class SurveyCacheTests(unittest.TestCase):
             self.assertEqual(second.title, "新见数")
             self.assertEqual(titles, [])
 
+    def test_remote_fingerprint_unavailable_reuses_recent_cache_temporarily(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calls: list[str] = []
+            original_runtime_directory = self._patch_runtime_directory(temp_dir)
+            original_fetch_fingerprint = survey_cache._fetch_remote_fingerprint
+            original_now = survey_cache._now
+            now_values = [1000, 1005]
+
+            def parser(url: str):
+                calls.append(url)
+                return build_survey_definition("wjx", "旧标题", [{"num": 1, "title": "旧题目", "type_code": "3"}])
+
+            try:
+                survey_cache._fetch_remote_fingerprint = lambda url, provider: "same" if len(calls) == 0 else None
+                survey_cache._now = lambda: now_values.pop(0)
+                first = parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+                second = parse_survey_with_cache("https://www.wjx.cn/vm/demo.aspx", parser)
+            finally:
+                survey_cache.get_runtime_directory = original_runtime_directory
+                survey_cache._fetch_remote_fingerprint = original_fetch_fingerprint
+                survey_cache._now = original_now
+
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(first.title, "旧标题")
+            self.assertEqual(second.title, "旧标题")
+
+    def test_clear_survey_parse_cache_removes_cached_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            original_runtime_directory = self._patch_runtime_directory(temp_dir)
+            cache_dir = os.path.join(temp_dir, "configs", "survey_cache")
+            os.makedirs(os.path.join(cache_dir, "nested"), exist_ok=True)
+            with open(os.path.join(cache_dir, "cache.json"), "w", encoding="utf-8") as file:
+                file.write("{}")
+            with open(os.path.join(cache_dir, "nested", "orphan.txt"), "w", encoding="utf-8") as file:
+                file.write("x")
+
+            try:
+                removed_count = survey_cache.clear_survey_parse_cache()
+            finally:
+                survey_cache.get_runtime_directory = original_runtime_directory
+
+            self.assertEqual(removed_count, 2)
+            self.assertEqual(os.listdir(cache_dir), [])
+
 
 if __name__ == "__main__":
     unittest.main()

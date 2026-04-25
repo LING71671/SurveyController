@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import unittest
-from threading import Event
+from threading import Event, Lock
+from unittest.mock import patch
 
-from software.app.browser_probe import _parse_probe_stdout, run_browser_probe_subprocess
-from software.core.questions.validation import validate_question_config
+from software.app.browser_probe import BrowserProbeResult
 from software.io.config import RuntimeConfig
-from software.core.questions.schema import QuestionEntry
 from software.ui.controller.run_controller_parts.runtime_init_gate import (
     RunControllerInitializationMixin,
     _extract_startup_service_warnings,
@@ -16,6 +15,7 @@ from software.ui.controller.run_controller_parts.runtime_init_gate import (
 
 class _DummyInitGate(RunControllerInitializationMixin):
     def __init__(self) -> None:
+        self.stop_event = Event()
         self._initializing = True
         self._starting = True
         self.running = True
@@ -27,6 +27,17 @@ class _DummyInitGate(RunControllerInitializationMixin):
         self._init_current_step_key = "playwright"
         self._init_gate_stop_event = Event()
         self._status_timer = _FakeTimer()
+        self._pending_execution_config = None
+        self._startup_status_check_lock = Lock()
+        self._startup_status_check_active = False
+        self._startup_service_warnings: list[str] = []
+        self.started_workers: list[tuple[RuntimeConfig, list, bool]] = []
+        self.dispatched_callbacks: list[object] = []
+        self.emit_status_calls = 0
+        self.startup_hint_events: list[tuple[str, str, int]] = []
+        self.survey_title = "测试问卷"
+        self.custom_confirm_dialog_handler = None
+        self.confirm_dialog_handler = None
         self.run_state_events: list[bool] = []
         self.status_events: list[tuple[str, int, int]] = []
         self.thread_progress_events: list[dict] = []
@@ -35,6 +46,17 @@ class _DummyInitGate(RunControllerInitializationMixin):
         self.statusUpdated = _FakeSignal(self.status_events)
         self.threadProgressUpdated = _FakeSignal(self.thread_progress_events)
         self.runFailed = _FakeSignal(self.run_failed_events)
+        self.startupHintEmitted = _FakeSignal(self.startup_hint_events)
+
+    def _start_workers_with_proxy_pool(self, config: RuntimeConfig, proxy_pool: list, *, emit_run_state: bool = True) -> None:
+        self.started_workers.append((config, list(proxy_pool), emit_run_state))
+
+    def _emit_status(self) -> None:
+        self.emit_status_calls += 1
+
+    def _dispatch_to_ui_async(self, callback) -> None:
+        self.dispatched_callbacks.append(callback)
+        callback()
 
 
 class _FakeSignal:
@@ -50,27 +72,26 @@ class _FakeSignal:
 
 class _FakeTimer:
     def __init__(self) -> None:
+        self.started = False
         self.stopped = False
+
+    def start(self) -> None:
+        self.started = True
 
     def stop(self) -> None:
         self.stopped = True
 
 
-class _FakeProbeProcess:
-    pid = 9527
+class _FakeThread:
+    def __init__(self, *, target=None, args=(), daemon: bool = False, name: str = "") -> None:
+        self.target = target
+        self.args = args
+        self.daemon = daemon
+        self.name = name
+        self.started = False
 
-    def __init__(self, stdout: bytes, stderr: bytes) -> None:
-        self._stdout = stdout
-        self._stderr = stderr
-
-    def poll(self) -> int:
-        return 0
-
-    def communicate(self, timeout: float | None = None) -> tuple[bytes, bytes]:
-        return self._stdout, self._stderr
-
-    def kill(self) -> None:
-        return None
+    def start(self) -> None:
+        self.started = True
 
 
 class RuntimeInitGateTests(unittest.TestCase):
@@ -158,74 +179,101 @@ class RuntimeInitGateTests(unittest.TestCase):
             ["随机ip提取 当前状态异常（接口超时；最近时间：2026-04-23 11:00:00）"],
         )
 
-    def test_parse_probe_stdout_reads_last_json_line(self) -> None:
-        result = _parse_probe_stdout(
-            "noise line\n"
-            "{\"ok\":true,\"browser\":\"edge\",\"error_kind\":\"\",\"message\":\"ok\",\"elapsed_ms\":321}\n"
+    def test_build_initialization_logs_marks_stage_and_completion(self) -> None:
+        self.mixin._init_stage_text = "正在检查浏览器"
+        self.mixin._init_steps = [
+            {"key": "probe", "label": "浏览器快检"},
+            {"key": "warmup", "label": "预热"},
+        ]
+        self.mixin._init_completed_steps = {"probe"}
+        self.mixin._init_current_step_key = "warmup"
+
+        lines = self.mixin._build_initialization_logs()
+
+        self.assertEqual(
+            lines,
+            ["当前阶段：正在检查浏览器", "[√] 浏览器快检", "[>] 预热"],
         )
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertTrue(result.ok)
-        self.assertEqual(result.browser, "edge")
-        self.assertEqual(result.elapsed_ms, 321)
 
-    def test_parse_probe_stdout_returns_none_for_invalid_output(self) -> None:
-        self.assertIsNone(_parse_probe_stdout("not json"))
+    def test_build_browser_probe_failure_message_includes_warning_snapshot(self) -> None:
+        self.mixin._startup_service_warnings = ["免费AI填空 当前状态异常"]
 
-    def test_run_browser_probe_subprocess_tolerates_invalid_utf8_bytes(self) -> None:
-        fake_process = _FakeProbeProcess(
-            b"probe noise:\x80\x81\n"
-            b"{\"ok\":true,\"browser\":\"edge\",\"error_kind\":\"\",\"message\":\"ok\",\"elapsed_ms\":15}\n",
-            b"\xff\xfe",
-        )
-        import software.app.browser_probe as browser_probe
-
-        original_popen = browser_probe.subprocess.Popen
-        browser_probe.subprocess.Popen = lambda *args, **kwargs: fake_process
-        try:
-            result = run_browser_probe_subprocess(
-                headless=True,
-                browser_preference=["edge"],
-                timeout_seconds=1,
+        message = self.mixin._build_browser_probe_failure_message(
+            BrowserProbeResult(
+                ok=False,
+                browser="edge",
+                message="启动失败",
+                elapsed_ms=123,
             )
-        finally:
-            browser_probe.subprocess.Popen = original_popen
-
-        self.assertTrue(result.ok)
-        self.assertEqual(result.browser, "edge")
-        self.assertEqual(result.elapsed_ms, 15)
-
-    def test_multiple_validation_allows_more_positive_candidates_than_max_limit(self) -> None:
-        entry = QuestionEntry(
-            question_type="multiple",
-            probabilities=[50.0, 50.0, 50.0, 50.0],
-            option_count=4,
-            question_num=4,
         )
 
-        result = validate_question_config(
-            [entry],
-            [{"num": 4, "multi_min_limit": None, "multi_max_limit": 3}],
+        self.assertIn("启动失败", message)
+        self.assertIn("检查耗时：123 ms", message)
+        self.assertIn("已尝试浏览器：edge", message)
+        self.assertIn("免费AI填空 当前状态异常", message)
+
+    def test_start_with_initialization_gate_bypasses_gate_for_single_thread(self) -> None:
+        config = RuntimeConfig()
+        config.headless_mode = True
+        config.threads = 1
+
+        self.mixin._start_with_initialization_gate(config, proxy_pool=["proxy-a"])
+
+        self.assertEqual(len(self.mixin.started_workers), 1)
+        self.assertEqual(self.mixin.started_workers[0][1], ["proxy-a"])
+        self.assertTrue(self.mixin.started_workers[0][2])
+
+    def test_start_with_initialization_gate_sets_up_background_thread(self) -> None:
+        config = RuntimeConfig()
+        config.headless_mode = True
+        config.threads = 2
+        created_threads: list[_FakeThread] = []
+
+        def build_thread(*, target=None, args=(), daemon: bool = False, name: str = "") -> _FakeThread:
+            thread = _FakeThread(target=target, args=args, daemon=daemon, name=name)
+            created_threads.append(thread)
+            return thread
+
+        with patch("software.ui.controller.run_controller_parts.runtime_init_gate.threading.Thread", side_effect=build_thread):
+            self.mixin._start_with_initialization_gate(config, proxy_pool=["proxy-a"])
+
+        self.assertTrue(self.mixin.running)
+        self.assertFalse(self.mixin._starting)
+        self.assertTrue(self.mixin._initializing)
+        self.assertEqual(self.mixin.run_state_events, [True])
+        self.assertTrue(self.mixin._status_timer.started)
+        self.assertEqual(self.mixin.emit_status_calls, 1)
+        self.assertEqual(len(created_threads), 1)
+        self.assertTrue(created_threads[0].started)
+        self.assertEqual(created_threads[0].name, "InitGate")
+
+    def test_run_initialization_gate_dispatches_success_callback(self) -> None:
+        config = RuntimeConfig()
+        config.headless_mode = True
+        config.threads = 2
+
+        with patch(
+            "software.ui.controller.run_controller_parts.runtime_init_gate.run_browser_probe_subprocess",
+            return_value=BrowserProbeResult(ok=True, browser="edge"),
+        ):
+            self.mixin._run_initialization_gate(config, ["proxy-a"], Event())
+
+        self.assertEqual(len(self.mixin.dispatched_callbacks), 1)
+        self.assertEqual(len(self.mixin.started_workers), 1)
+        self.assertEqual(self.mixin.started_workers[0][1], ["proxy-a"])
+        self.assertFalse(self.mixin.started_workers[0][2])
+
+    def test_handle_browser_probe_failure_cancels_startup_when_user_declines(self) -> None:
+        config = RuntimeConfig()
+
+        self.mixin._handle_browser_probe_failure(
+            config,
+            ["proxy-a"],
+            BrowserProbeResult(ok=False, browser="edge", message="启动失败", elapsed_ms=12),
         )
 
-        self.assertIsNone(result)
-
-    def test_multiple_validation_still_blocks_when_positive_candidates_below_min_limit(self) -> None:
-        entry = QuestionEntry(
-            question_type="multiple",
-            probabilities=[100.0, 0.0, 0.0, 0.0],
-            option_count=4,
-            question_num=6,
-        )
-
-        result = validate_question_config(
-            [entry],
-            [{"num": 6, "multi_min_limit": 2, "multi_max_limit": 3}],
-        )
-
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertIn("最少选择 2 项", result)
+        self.assertFalse(self.mixin.running)
+        self.assertEqual(self.mixin.status_events[-1], ("已取消启动", 0, 0))
 
 
 if __name__ == "__main__":

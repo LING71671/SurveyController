@@ -4,7 +4,7 @@
 
 ## 快速开始
 - **交流**：首选 GitHub Issues，或加入 QQ 群（见 README）。
-- **参考**：建议阅读 [项目文档](doc/wjx-web-structure.md) 以了解各个平台的解析逻辑。
+- **参考**：网页解析和接口信息统一改为在线查阅，优先看 API 文档：https://api-wjx.hungrym0.top/api/document
 - **环境**：Python 3.11+，Windows 10/11。执行 `pip install -r requirements.txt` 安装依赖。
 
 <details>
@@ -44,17 +44,26 @@
 │   │   └── window_smoke_check.py
 │   ├── unit_tests/
 │   │   ├── __init__.py
+│   │   ├── app/
+│   │   │   └── test_browser_probe.py
 │   │   ├── engine/
-│   │   │   └── test_runtime_init_gate.py
+│   │   │   ├── test_browser_session_service.py
+│   │   │   ├── test_cleanup.py
+│   │   │   ├── test_provider_common.py
+│   │   │   ├── test_runtime_init_gate.py
+│   │   │   ├── test_runtime_control.py
+│   │   │   └── test_submission_service.py
 │   │   ├── providers/
+│   │   │   ├── test_common.py
+│   │   │   ├── test_credamo_parser.py
 │   │   │   ├── test_credamo_runtime.py
 │   │   │   └── test_survey_cache.py
-│   │   └── psychometrics/
+│   │   ├── psychometrics/
+│   │   └── questions/
+│   │       └── test_validation.py
 │   └── worker/
 │       ├── wrangler.toml
 │       └── src/
-├── doc/
-│   └── wjx-web-structure.md
 ├── logs/
 ├── Setup/
 │   ├── InnoSetup.iss
