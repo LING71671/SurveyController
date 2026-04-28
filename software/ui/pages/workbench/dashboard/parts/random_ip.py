@@ -116,7 +116,7 @@ class DashboardRandomIPMixin:
         try:
             payload = self._fetch_random_ip_heartbeat_status()
         except Exception as exc:
-            log_suppressed_exception("_run_random_ip_heartbeat_fetch", exc, level=logging.WARNING)
+            logging.warning("随机IP服务状态检查失败，已按未知状态处理：%s", exc)
             payload = {
                 "level": "warning",
                 "text": "服务状态未知",

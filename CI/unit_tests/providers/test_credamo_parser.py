@@ -132,6 +132,46 @@ class CredamoParserTests(unittest.TestCase):
 
         self.assertEqual(question["forced_texts"], ["你好"])
 
+    def test_normalize_question_does_not_treat_plain_select_prompt_as_forced_choice(self) -> None:
+        question = parser._normalize_question(
+            {
+                "question_num": "Q2",
+                "title": "Q2 请选择你的年龄段",
+                "title_text": "请选择你的年龄段",
+                "body_text": "请选择你的年龄段 1. 15-25岁 2. 26-35岁 3. 36-45岁 4. 46-55岁 5. 56-65岁 6. 65岁以上",
+                "question_kind": "single",
+                "provider_type": "single",
+                "option_texts": ["15-25岁", "26-35岁", "36-45岁", "46-55岁", "56-65岁", "65岁以上"],
+                "text_inputs": 0,
+                "page": 1,
+                "question_id": "question-2",
+            },
+            fallback_num=2,
+        )
+
+        self.assertIsNone(question["forced_option_index"])
+        self.assertIsNone(question["forced_option_text"])
+
+    def test_normalize_question_does_not_match_option_from_body_text_only(self) -> None:
+        question = parser._normalize_question(
+            {
+                "question_num": "Q5",
+                "title": "Q5 请选择你的职业类型",
+                "title_text": "请选择你的职业类型",
+                "body_text": "请选择你的职业类型 1. 学生 2. 国有企业 3. 事业单位 4. 公务员 5. 民营企业/个体工商户 6. 外资企业 7. 退休人员",
+                "question_kind": "single",
+                "provider_type": "single",
+                "option_texts": ["学生", "国有企业", "事业单位", "公务员", "民营企业/个体工商户", "外资企业", "退休人员"],
+                "text_inputs": 0,
+                "page": 1,
+                "question_id": "question-5",
+            },
+            fallback_num=5,
+        )
+
+        self.assertIsNone(question["forced_option_index"])
+        self.assertIsNone(question["forced_option_text"])
+
     def test_normalize_question_prefers_full_title_text_and_strips_type_tag(self) -> None:
         question = parser._normalize_question(
             {

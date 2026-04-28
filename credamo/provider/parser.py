@@ -300,7 +300,6 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
         extra_fragments=[
             raw.get("title_text"),
             raw.get("tip_text"),
-            raw.get("body_text"),
         ],
     )
     if forced_option_index is None:
@@ -310,7 +309,6 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
             extra_fragments=[
                 raw.get("title_text"),
                 raw.get("tip_text"),
-                raw.get("body_text"),
             ],
         )
     forced_texts = _extract_forced_texts(
@@ -318,7 +316,6 @@ def _normalize_question(raw: Dict[str, Any], fallback_num: int) -> Dict[str, Any
         extra_fragments=[
             raw.get("title_text"),
             raw.get("tip_text"),
-            raw.get("body_text"),
         ],
     )
 
