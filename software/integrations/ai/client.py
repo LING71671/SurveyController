@@ -2,6 +2,7 @@
 """AI 服务模块 - 支持多种 AI API 调用。"""
 import json
 import logging
+import time
 from typing import Optional, Dict, Any, Iterable, List, Union
 from urllib.parse import urlsplit, urlunsplit
 
@@ -81,8 +82,7 @@ _SYSTEM_PROMPT_BASE = (
     "1. 只给出答案本身，不要解释原因，不要分析，不要教学\n"
     "2. 以个人体验和模糊印象为主，可以不确定、可以用“大概、感觉、差不多”等表达\n"
     "3. 回答尽量简短，避免长句\n"
-    "4. 不要使用专业术语或严谨表述\n"
-    "5. 如果不确定，可以直接说“不太清楚/没太注意”\n\n"
+    "4. 不要使用专业术语或严谨表述\n\n"
     "请注意：\n"
     "- 不要像AI助手一样分点说明\n"
     "- 不要补充背景知识\n"
@@ -118,7 +118,10 @@ _RUNTIME_AI_SETTINGS: Optional[Dict[str, Any]] = None
 _CHAT_COMPLETIONS_SUFFIX = "/chat/completions"
 _RESPONSES_SUFFIX = "/responses"
 _LEGACY_COMPLETIONS_SUFFIX = "/completions"
-_AI_REQUEST_TIMEOUT_SECONDS = 45
+_AI_REQUEST_TIMEOUT_SECONDS = 25
+_AI_MAX_RETRY_ATTEMPTS = 2
+_AI_RETRYABLE_STATUS_CODES = frozenset({429, 502, 503, 504})
+_AI_RETRY_BACKOFF_SECONDS = 1.0
 
 _FREE_AI_ERROR_MESSAGES = {
     "device_id_required": "免费 AI 调用失败：缺少设备标识（X-Device-ID）",
@@ -466,6 +469,41 @@ def _extract_json_dict(response: Any) -> Dict[str, Any]:
     return {}
 
 
+def _should_retry_ai_request(exc: Exception) -> bool:
+    if isinstance(exc, (http_client.Timeout, http_client.ConnectTimeout, http_client.ReadTimeout, http_client.ConnectionError)):
+        return True
+    if isinstance(exc, http_client.RequestException) and not isinstance(exc, http_client.HTTPError):
+        return True
+    if isinstance(exc, http_client.HTTPError):
+        response = getattr(exc, "response", None)
+        status_code = int(getattr(response, "status_code", 0) or 0)
+        return status_code in _AI_RETRYABLE_STATUS_CODES
+    return False
+
+
+def _execute_ai_request_with_retry(request_name: str, request_func):
+    last_error: Exception | None = None
+    for attempt in range(1, _AI_MAX_RETRY_ATTEMPTS + 1):
+        try:
+            return request_func()
+        except Exception as exc:
+            last_error = exc
+            should_retry = attempt < _AI_MAX_RETRY_ATTEMPTS and _should_retry_ai_request(exc)
+            if not should_retry:
+                raise
+            logger.warning(
+                "AI 请求临时失败，准备重试 | request=%s | attempt=%s/%s | error=%s",
+                request_name,
+                attempt,
+                _AI_MAX_RETRY_ATTEMPTS,
+                exc,
+            )
+            time.sleep(_AI_RETRY_BACKOFF_SECONDS)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"AI 请求执行失败：{request_name}")
+
+
 def _format_free_ai_error(detail: str, status_code: int) -> str:
     if detail in _FREE_AI_ERROR_MESSAGES:
         return _FREE_AI_ERROR_MESSAGES[detail]
@@ -595,8 +633,15 @@ def _call_free_ai_api(
     if question_type == FREE_QUESTION_TYPE_MULTI:
         payload["blank_count"] = int(blank_count or 0)
 
-    # AI 填空请求强制直连本机网络，不读取系统代理环境变量。
-    response = http_client.post(AI_FREE_ENDPOINT, headers=headers, json=payload, timeout=timeout, proxies={})
+    def _send_request():
+        # AI 填空请求强制直连本机网络，不读取系统代理环境变量。
+        response = http_client.post(AI_FREE_ENDPOINT, headers=headers, json=payload, timeout=timeout, proxies={})
+        status_code = int(getattr(response, "status_code", 0) or 0)
+        if status_code in _AI_RETRYABLE_STATUS_CODES:
+            response.raise_for_status()
+        return response
+
+    response = _execute_ai_request_with_retry("free_ai", _send_request)
     status_code = int(getattr(response, "status_code", 0) or 0)
     if status_code != 200:
         detail = _extract_free_error_detail(response)
@@ -657,8 +702,10 @@ def _call_chat_completions(
         "temperature": 0.7,
     }
     try:
-        resp = http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={})
-        resp.raise_for_status()
+        resp = _execute_ai_request_with_retry(
+            "chat_completions",
+            lambda: http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={}).raise_for_status(),
+        )
         data = resp.json()
         return _extract_chat_completion_text(data)
     except Exception as exc:
@@ -686,8 +733,10 @@ def _call_responses_api(
         "temperature": 0.7,
     }
     try:
-        resp = http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={})
-        resp.raise_for_status()
+        resp = _execute_ai_request_with_retry(
+            "responses",
+            lambda: http_client.post(url, headers=headers, json=payload, timeout=timeout, proxies={}).raise_for_status(),
+        )
         data = resp.json()
         return _extract_responses_text(data)
     except Exception as exc:
