@@ -115,15 +115,20 @@ def supports_reverse_fill_runtime(question_type: str, info: Dict[str, Any]) -> b
 
 
 def resolve_question_entry(info: Dict[str, Any], entries: List[QuestionEntry]) -> Optional[QuestionEntry]:
-    question_num = info.get("num")
+    raw_question_num = info.get("num")
+    try:
+        question_num = int(raw_question_num) if raw_question_num is not None else None
+    except Exception:
+        question_num = None
     title_key = normalize_reverse_fill_key(info.get("title"))
     matched_by_title: Optional[QuestionEntry] = None
     for entry in list(entries or []):
         try:
-            entry_num = int(getattr(entry, "question_num", None))
+            raw_entry_num = getattr(entry, "question_num", None)
+            entry_num = int(raw_entry_num) if raw_entry_num is not None else None
         except Exception:
             entry_num = None
-        if entry_num is not None and question_num is not None and int(question_num) == entry_num:
+        if entry_num is not None and question_num is not None and question_num == entry_num:
             return entry
         if matched_by_title is None and title_key and normalize_reverse_fill_key(getattr(entry, "question_title", None)) == title_key:
             matched_by_title = entry
@@ -304,4 +309,3 @@ def parse_matrix_answer(
         kind=REVERSE_FILL_KIND_MATRIX,
         matrix_choice_indexes=row_indexes,
     )
-

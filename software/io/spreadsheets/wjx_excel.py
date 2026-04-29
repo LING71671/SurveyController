@@ -104,9 +104,13 @@ def load_wjx_excel_export(source_path: str, *, preferred_format: str = REVERSE_F
                 continue
             question_num = int(match.group(1))
             suffix = str(match.group(2) or "").strip()
+            raw_column = cell.column
+            if raw_column is None:
+                continue
+            column_index = int(raw_column)
             question_columns.setdefault(question_num, []).append(
                 ReverseFillColumn(
-                    column_index=int(cell.column),
+                    column_index=column_index,
                     header=header,
                     question_num=question_num,
                     suffix=suffix,
@@ -144,4 +148,3 @@ def load_wjx_excel_export(source_path: str, *, preferred_format: str = REVERSE_F
         )
     finally:
         workbook.close()
-

@@ -27,7 +27,7 @@ def resolve_current_reverse_fill_answer(task_ctx: Any, question_num: int) -> Opt
     if not callable(getter):
         return None
     try:
-        return getter(int(question_num))
+        answer = getter(int(question_num))
     except Exception:
         return None
-
+    return answer if isinstance(answer, ReverseFillAnswer) else None

@@ -511,7 +511,8 @@ def single(
     forced_index: Optional[int] = None
     if reverse_fill_answer is not None and reverse_fill_answer.kind == REVERSE_FILL_KIND_CHOICE:
         try:
-            forced_index = int(reverse_fill_answer.choice_index)
+            raw_choice_index = reverse_fill_answer.choice_index
+            forced_index = int(raw_choice_index) if raw_choice_index is not None else None
         except Exception:
             forced_index = None
 

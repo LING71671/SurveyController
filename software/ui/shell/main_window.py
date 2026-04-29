@@ -597,10 +597,12 @@ class MainWindow(
 
     def _sync_reverse_fill_context(self) -> None:
         try:
+            url_edit = getattr(self.dashboard, "url_edit", None)
+            url_text = url_edit.text() if url_edit is not None and hasattr(url_edit, "text") else ""
             survey_provider = str(
                 getattr(self.controller, "survey_provider", "")
                 or getattr(getattr(self.controller, "config", None), "survey_provider", "")
-                or detect_survey_provider(getattr(self.dashboard, "url_edit", None).text() if hasattr(getattr(self.dashboard, "url_edit", None), "text") else "", default="")
+                or detect_survey_provider(url_text, default="")
                 or ""
             )
             self.reverse_fill_page.set_question_context(
